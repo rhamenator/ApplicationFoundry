@@ -1,0 +1,193 @@
+@page "/studio"
+@attribute [Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IFitScorer FitScorer
+@inject ICareerDocumentService Documents
+
+<PageTitle>Career studio</PageTitle>
+
+<h1>Career studio</h1>
+<p class="text-secondary">Your drafts stay reviewable. Export is blocked until you explicitly approve a version.</p>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-info">@message</div>
+}
+
+<section class="studio-panel">
+    <h2>Standard profile</h2>
+    <EditForm Model="profile" OnValidSubmit="SaveProfileAsync" FormName="profile">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+        <div class="profile-grid">
+            <label>Title<InputText @bind-Value="profile.Title" /></label>
+            <label>First name<InputText @bind-Value="profile.FirstName" /></label>
+            <label>Middle initial(s)<InputText @bind-Value="profile.MiddleInitials" /></label>
+            <label>Last name<InputText @bind-Value="profile.LastName" /></label>
+            <label>Suffix<InputText @bind-Value="profile.Suffix" /></label>
+            <label>Preferred display name<InputText @bind-Value="profile.PreferredDisplayName" /></label>
+            <label>Email<InputText @bind-Value="profile.Email" /></label>
+            <label>Phone<InputText @bind-Value="profile.Phone" /></label>
+        </div>
+        <label>Professional summary<InputTextArea @bind-Value="profile.Summary" rows="4" /></label>
+        <button class="btn btn-primary" type="submit">Save profile</button>
+    </EditForm>
+</section>
+
+<section class="studio-panel">
+    <h2>Evidence library</h2>
+    <EditForm Model="newEvidence" OnValidSubmit="AddEvidenceAsync" FormName="evidence">
+        <DataAnnotationsValidator />
+        <div class="profile-grid">
+            <label>Kind<InputText @bind-Value="newEvidence.Kind" /></label>
+            <label>Keywords (comma separated)<InputText @bind-Value="newEvidence.Keywords" /></label>
+        </div>
+        <label>Evidence claim<InputText @bind-Value="newEvidence.Claim" /></label>
+        <label>Details<InputTextArea @bind-Value="newEvidence.Details" rows="3" /></label>
+        <button class="btn btn-outline-primary" type="submit">Add evidence</button>
+    </EditForm>
+    <ul class="evidence-list">
+        @foreach (var item in profile.Evidence)
+        {
+            <li><strong>@item.Claim</strong><span>@item.Kind · @item.Keywords</span></li>
+        }
+    </ul>
+</section>
+
+<section class="studio-panel">
+    <h2>Import an opportunity</h2>
+    <p>Paste a posting or use this browser-assist bookmarklet on a job page, then paste the copied text here:</p>
+    <a class="bookmarklet" href="javascript:(()=>navigator.clipboard.writeText(document.title+'%0A'+location.href+'%0A%0A'+getSelection().toString()))()">Copy selected job</a>
+    <EditForm Model="newJob" OnValidSubmit="AddJobAsync" FormName="job">
+        <DataAnnotationsValidator />
+        <div class="profile-grid">
+            <label>Role title<InputText @bind-Value="newJob.RoleTitle" /></label>
+            <label>Organization<InputText @bind-Value="newJob.Organization" /></label>
+            <label>Source URL<InputText @bind-Value="newJob.SourceUrl" /></label>
+        </div>
+        <label>Job description<InputTextArea @bind-Value="newJob.Description" rows="10" /></label>
+        <button class="btn btn-primary" type="submit">Analyze and draft</button>
+    </EditForm>
+</section>
+
+<section class="studio-panel">
+    <h2>Application tracker</h2>
+    @foreach (var job in jobs)
+    {
+        <article class="job-card">
+            <div><p class="eyebrow">@job.Status</p><h3>@job.RoleTitle</h3><p>@job.Organization</p></div>
+            <div class="fit-score"><strong>@job.FitScore.ToString("P0")</strong><span>local fit signal</span></div>
+            <p class="fit-explanation">@job.FitExplanation</p>
+            @foreach (var document in job.Documents.OrderBy(document => document.Kind))
+            {
+                <details>
+                    <summary>@document.Kind · version @document.Version · @(document.ApprovedAt is null ? "review required" : "approved")</summary>
+                    <pre>@document.Content</pre>
+                    @if (document.ApprovedAt is null)
+                    {
+                        <button class="btn btn-sm btn-success" @onclick="() => ApproveAsync(document.Id)">Approve this version</button>
+                    }
+                    else
+                    {
+                        <a href="@($"/documents/{document.Id}/docx")">DOCX</a><span> · </span><a href="@($"/documents/{document.Id}/pdf")">PDF</a>
+                    }
+                </details>
+            }
+            <button class="btn btn-sm btn-outline-primary" @onclick="() => MarkSubmittedAsync(job.Id)">Record manual submission</button>
+        </article>
+    }
+</section>
+
+@code {
+    private CandidateProfile profile = new();
+    private EvidenceItem newEvidence = new();
+    private JobOpportunity newJob = new();
+    private List<JobOpportunity> jobs = [];
+    private string userId = "";
+    private string message = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        profile = await db.CandidateProfiles.Include(item => item.Evidence).SingleOrDefaultAsync(item => item.UserId == userId)
+            ?? new CandidateProfile { UserId = userId };
+        jobs = await db.JobOpportunities.Include(job => job.Documents).Include(job => job.Activities)
+            .Where(job => job.UserId == userId).OrderByDescending(job => job.ImportedAt).ToListAsync();
+    }
+
+    private async Task SaveProfileAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        if (profile.Id == 0) db.CandidateProfiles.Add(profile); else db.CandidateProfiles.Update(profile);
+        await db.SaveChangesAsync();
+        message = "Profile saved.";
+        await ReloadAsync();
+    }
+
+    private async Task AddEvidenceAsync()
+    {
+        if (profile.Id == 0) { message = "Save the profile before adding evidence."; return; }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        newEvidence.ProfileId = profile.Id;
+        db.EvidenceItems.Add(newEvidence);
+        await db.SaveChangesAsync();
+        newEvidence = new EvidenceItem();
+        message = "Evidence added.";
+        await ReloadAsync();
+    }
+
+    private async Task AddJobAsync()
+    {
+        if (profile.Id == 0 || profile.Evidence.Count == 0) { message = "Save a profile and at least one evidence item first."; return; }
+        newJob.UserId = userId;
+        newJob.Status = OpportunityStatus.ReadyForReview;
+        var fit = FitScorer.Score(profile, newJob);
+        newJob.FitScore = fit.Score;
+        newJob.FitExplanation = fit.Explanation;
+        newJob.Documents.Add(new DocumentVersion { Kind = CareerDocumentKind.Resume, Version = 1, Content = Documents.DraftResume(profile, newJob) });
+        newJob.Documents.Add(new DocumentVersion { Kind = CareerDocumentKind.CoverLetter, Version = 1, Content = Documents.DraftCoverLetter(profile, newJob) });
+        newJob.Activities.Add(new ApplicationActivity { Action = "drafted", Note = "Local fit analysis and document drafts created." });
+        await using var db = await DbFactory.CreateDbContextAsync();
+        db.JobOpportunities.Add(newJob);
+        await db.SaveChangesAsync();
+        newJob = new JobOpportunity();
+        message = "Opportunity analyzed; review both drafts before approval.";
+        await ReloadAsync();
+    }
+
+    private async Task ApproveAsync(int documentId)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var document = await db.DocumentVersions.Join(db.JobOpportunities, d => d.JobOpportunityId, j => j.Id, (d, j) => new { d, j.UserId })
+            .SingleAsync(item => item.d.Id == documentId && item.UserId == userId);
+        document.d.ApprovedAt = DateTimeOffset.UtcNow;
+        document.d.ApprovedByUserId = userId;
+        await db.SaveChangesAsync();
+        message = "Version approved and available for export.";
+        await ReloadAsync();
+    }
+
+    private async Task MarkSubmittedAsync(int jobId)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.Include(item => item.Documents).SingleAsync(item => item.Id == jobId && item.UserId == userId);
+        if (job.Documents.Count < 2 || job.Documents.Any(document => document.ApprovedAt is null))
+        {
+            message = "Approve both document versions before recording a manual submission.";
+            return;
+        }
+        job.Status = OpportunityStatus.Submitted;
+        job.Activities.Add(new ApplicationActivity { Action = "submitted", Note = "User confirmed a manual external submission." });
+        await db.SaveChangesAsync();
+        message = "Manual submission recorded. No external form was automated.";
+        await ReloadAsync();
+    }
+}

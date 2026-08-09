@@ -1,0 +1,18 @@
+{
+  "title": "Dr.",
+  "firstName": "Avery",
+  "middleInitials": "J.",
+  "lastName": "Rivera",
+  "suffix": "PhD",
+  "preferredDisplayName": "Avery Rivera",
+  "email": "avery@example.test",
+  "summary": "Systems engineer building reliable distributed software.",
+  "evidence": [
+    {
+      "kind": "achievement",
+      "claim": "Reduced service latency",
+      "details": "Measured a 35 percent reduction in a fictional benchmark.",
+      "keywords": "distributed,reliability,performance"
+    }
+  ]
+}
