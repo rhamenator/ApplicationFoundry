@@ -112,13 +112,22 @@
 
     private async Task OnSubmitAsync()
     {
-        if (user is null)
+        if (user is null || currentLogins is null)
         {
             RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
             return;
         }
 
-        var result = await UserManager.RemoveLoginAsync(user, LoginProvider!, ProviderKey!);
+        var login = currentLogins.SingleOrDefault(item =>
+            string.Equals(item.LoginProvider, LoginProvider, StringComparison.Ordinal) &&
+            string.Equals(item.ProviderKey, ProviderKey, StringComparison.Ordinal));
+        if (login is null)
+        {
+            RedirectManager.RedirectToCurrentPageWithStatus("Error: The external login was not found on this account.", HttpContext);
+            return;
+        }
+
+        var result = await UserManager.RemoveLoginAsync(user, login.LoginProvider, login.ProviderKey);
         if (!result.Succeeded)
         {
             RedirectManager.RedirectToCurrentPageWithStatus("Error: The external login was not removed.", HttpContext);
