@@ -21,7 +21,7 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
-      - run: dotnet restore --locked-mode
+      - run: dotnet restore --force-evaluate
       - run: dotnet test --configuration Release --no-restore
 
   windows:
