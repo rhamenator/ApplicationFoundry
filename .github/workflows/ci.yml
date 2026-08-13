@@ -14,7 +14,9 @@ jobs:
           dotnet-version: 10.0.x
           cache: true
           cache-dependency-path: '**/packages.lock.json'
-      - run: dotnet restore --locked-mode
+      # .NET servicing releases update the implicit Microsoft.AspNetCore.App.Internal.Assets
+      # version even when all explicit application dependencies remain unchanged.
+      - run: dotnet restore --force-evaluate
       - run: dotnet format --no-restore --verify-no-changes
       - run: dotnet build --configuration Release --no-restore
       - run: dotnet test --configuration Release --no-build
