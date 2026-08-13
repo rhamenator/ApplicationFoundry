@@ -1,0 +1,112 @@
+name: Release installers
+
+on:
+  pull_request:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  APP_VERSION: 0.1.${{ github.run_number }}
+  PROJECT: src/ApplicationFoundry/ApplicationFoundry.csproj
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore --locked-mode
+      - run: dotnet test --configuration Release --no-restore
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet publish $env:PROJECT -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:Version=$env:APP_VERSION -o publish
+      - run: choco install innosetup --no-progress -y
+      - shell: pwsh
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVersion=$env:APP_VERSION" packaging\windows\ApplicationFoundry.iss'
+      - uses: actions/upload-artifact@v7
+        with:
+          name: application-foundry-windows
+          path: artifacts/*.exe
+          if-no-files-found: error
+
+  macos:
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - runner: macos-15-intel
+            runtime: osx-x64
+          - runner: macos-15
+            runtime: osx-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet publish "$PROJECT" -c Release -r '${{ matrix.runtime }}' --self-contained true -p:PublishSingleFile=true -p:Version="$APP_VERSION" -o publish
+      - name: Build pkg
+        run: |
+          mkdir -p package-root/usr/local/lib/application-foundry package-root/usr/local/bin artifacts
+          cp -R publish/. package-root/usr/local/lib/application-foundry/
+          chmod +x package-root/usr/local/lib/application-foundry/ApplicationFoundry
+          ln -s ../lib/application-foundry/ApplicationFoundry package-root/usr/local/bin/application-foundry
+          pkgbuild --root package-root --identifier com.yourfoxprodeveloper.application-foundry --version "$APP_VERSION" "artifacts/ApplicationFoundry-${APP_VERSION}-${{ matrix.runtime }}.pkg"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: application-foundry-${{ matrix.runtime }}
+          path: artifacts/*.pkg
+          if-no-files-found: error
+
+  linux:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet publish "$PROJECT" -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:Version="$APP_VERSION" -o publish
+      - name: Build deb and rpm
+        run: |
+          sudo apt-get update && sudo apt-get install -y ruby-dev rpm
+          sudo gem install --no-document fpm
+          mkdir -p package-root/usr/lib/application-foundry package-root/usr/bin artifacts
+          cp -R publish/. package-root/usr/lib/application-foundry/
+          chmod +x package-root/usr/lib/application-foundry/ApplicationFoundry
+          ln -s ../lib/application-foundry/ApplicationFoundry package-root/usr/bin/application-foundry
+          fpm -s dir -t deb -n application-foundry -v "$APP_VERSION" -C package-root -p "artifacts/application-foundry_${APP_VERSION}_amd64.deb" .
+          fpm -s dir -t rpm -n application-foundry -v "$APP_VERSION" -C package-root -p "artifacts/application-foundry-${APP_VERSION}-1.x86_64.rpm" .
+      - uses: actions/upload-artifact@v7
+        with:
+          name: application-foundry-linux
+          path: artifacts/*
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, macos, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: release-assets
+          pattern: application-foundry-*
+          merge-multiple: true
+      - run: gh release create "$GITHUB_REF_NAME" release-assets/* --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
