@@ -124,6 +124,13 @@
             RedirectManager.RedirectTo(ReturnUrl);
             return;
         }
+        else if (result.RequiresTwoFactor)
+        {
+            RedirectManager.RedirectTo(
+                "Account/LoginWith2fa",
+                new() { ["returnUrl"] = ReturnUrl, ["rememberMe"] = false });
+            return;
+        }
         else if (result.IsLockedOut)
         {
             RedirectManager.RedirectTo("Account/Lockout");
