@@ -1,3 +1,7 @@
+<p align="center">
+  <img src=".github/assets/logo.png" alt="ApplicationFoundry logo" width="220">
+</p>
+
 # Application Foundry
 
 Application Foundry is a local-first career studio built on .NET 10, ASP.NET
