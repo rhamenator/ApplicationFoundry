@@ -7,14 +7,23 @@ using ApplicationFoundry.Data;
 using ApplicationFoundry.Features.Documents;
 using ApplicationFoundry.Features.Fit;
 using Microsoft.Data.Sqlite;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using System.Diagnostics;
 using System.Security.Claims;
 
+var desktopMode = args.Any(arg => string.Equals(arg, "--desktop", StringComparison.OrdinalIgnoreCase));
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
-    Args = args,
+    Args = args.Where(arg => !string.Equals(arg, "--desktop", StringComparison.OrdinalIgnoreCase)).ToArray(),
     // Packaged binaries may be launched from any working directory.
     ContentRootPath = AppContext.BaseDirectory
 });
+if (desktopMode)
+{
+    // A random loopback port avoids conflicts with other local web applications.
+    builder.WebHost.UseUrls("http://127.0.0.1:0");
+}
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
@@ -88,7 +97,7 @@ else
     app.UseHsts();
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-app.UseHttpsRedirection();
+if (!desktopMode) app.UseHttpsRedirection();
 
 app.UseAntiforgery();
 
@@ -130,6 +139,28 @@ app.MapGet("/documents/{id:int}/{format}", async (
     };
 }).RequireAuthorization();
 
-app.Run();
+if (desktopMode)
+{
+    await app.StartAsync();
+    var address = app.Services.GetRequiredService<IServer>()
+        .Features.Get<IServerAddressesFeature>()?
+        .Addresses.SingleOrDefault(value => value.StartsWith("http://127.0.0.1:", StringComparison.OrdinalIgnoreCase));
+    if (address is null) throw new InvalidOperationException("The desktop server did not bind to a loopback address.");
+
+    try
+    {
+        Process.Start(new ProcessStartInfo(address) { UseShellExecute = true });
+    }
+    catch (Exception exception)
+    {
+        app.Logger.LogWarning(exception, "Open {Address} in a browser to use Application Foundry.", address);
+    }
+
+    await app.WaitForShutdownAsync();
+}
+else
+{
+    await app.RunAsync();
+}
 
 public partial class Program;

@@ -23,6 +23,13 @@ data directory, or configure `ConnectionStrings__DefaultConnection` to use a
 different SQLite connection string. Back up `app.db` before upgrading an
 existing installation.
 
+On Windows, the installer places Application Foundry in the current user's
+applications folder without requesting administrator rights. The Start menu
+shortcut starts the local server and opens the app in the default browser.
+Keep the Application Foundry console window open while using the app; closing
+it stops the local server. The setup wizard can launch the app when installation
+finishes.
+
 The fit scorer runs a small ONNX logistic model entirely in the application
 process. Its four visible inputs measure keyword evidence, overall profile
 coverage, role-title alignment, and evidence depth. It is a drafting aid, not a
