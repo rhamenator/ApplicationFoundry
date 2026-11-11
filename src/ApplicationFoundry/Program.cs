@@ -6,9 +6,15 @@ using ApplicationFoundry.Components.Account;
 using ApplicationFoundry.Data;
 using ApplicationFoundry.Features.Documents;
 using ApplicationFoundry.Features.Fit;
+using Microsoft.Data.Sqlite;
 using System.Security.Claims;
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    // Packaged binaries may be launched from any working directory.
+    ContentRootPath = AppContext.BaseDirectory
+});
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
@@ -25,7 +31,24 @@ builder.Services.AddAuthentication(options =>
     })
     .AddIdentityCookies();
 
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    var dataDirectory = builder.Configuration["ApplicationFoundry:DataDirectory"];
+    if (string.IsNullOrWhiteSpace(dataDirectory))
+    {
+        dataDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ApplicationFoundry");
+    }
+
+    Directory.CreateDirectory(dataDirectory);
+    connectionString = new SqliteConnectionStringBuilder
+    {
+        DataSource = Path.Combine(dataDirectory, "app.db"),
+        Cache = SqliteCacheMode.Shared
+    }.ToString();
+}
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
     options.UseSqlite(connectionString));
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
@@ -45,6 +68,13 @@ builder.Services.AddSingleton<ICareerDocumentService, CareerDocumentService>();
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
+
+// Installed applications must be usable on first launch, without the EF CLI.
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await db.Database.MigrateAsync();
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

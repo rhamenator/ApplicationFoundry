@@ -10,13 +10,22 @@ permissions:
   contents: write
 
 env:
-  APP_VERSION: 0.1.${{ github.run_number }}
   PROJECT: src/ApplicationFoundry/ApplicationFoundry.csproj
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    outputs:
+      app_version: ${{ steps.version.outputs.app_version }}
     steps:
+      - id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "app_version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "app_version=0.1.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5
         with:
@@ -27,6 +36,8 @@ jobs:
   windows:
     needs: test
     runs-on: windows-latest
+    env:
+      APP_VERSION: ${{ needs.test.outputs.app_version }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5
@@ -44,6 +55,8 @@ jobs:
 
   macos:
     needs: test
+    env:
+      APP_VERSION: ${{ needs.test.outputs.app_version }}
     strategy:
       matrix:
         include:
@@ -74,12 +87,32 @@ jobs:
   linux:
     needs: test
     runs-on: ubuntu-24.04
+    env:
+      APP_VERSION: ${{ needs.test.outputs.app_version }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
       - run: dotnet publish "$PROJECT" -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:Version="$APP_VERSION" -o publish
+      - name: Smoke-test published app from a different directory
+        shell: bash
+        run: |
+          export ApplicationFoundry__DataDirectory="$RUNNER_TEMP/application-foundry-smoke"
+          export ASPNETCORE_URLS="http://127.0.0.1:51829"
+          cd "$RUNNER_TEMP"
+          "$GITHUB_WORKSPACE/publish/ApplicationFoundry" > "$RUNNER_TEMP/application-foundry-smoke.log" 2>&1 &
+          app_pid=$!
+          trap 'kill "$app_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if [[ "$(curl --silent "$ASPNETCORE_URLS/health")" == Healthy ]]; then
+              break
+            fi
+            sleep 1
+          done
+          test -f "$ApplicationFoundry__DataDirectory/app.db"
+          curl --fail --silent --output /dev/null "$ASPNETCORE_URLS/"
+          curl --fail --silent --output /dev/null "$ASPNETCORE_URLS/app.css"
       - name: Build deb and rpm
         run: |
           sudo apt-get update && sudo apt-get install -y ruby-dev rpm

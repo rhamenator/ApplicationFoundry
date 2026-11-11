@@ -11,10 +11,17 @@ name, suffix, and preferred display name.
 ## Run locally
 
 ```powershell
-dotnet restore --locked-mode
-dotnet ef database update --project src/ApplicationFoundry --startup-project src/ApplicationFoundry
+dotnet restore --force-evaluate
 dotnet run --project src/ApplicationFoundry
 ```
+
+The app creates or updates its SQLite database on startup. By default it stores
+`app.db` in the current user's local application data directory under
+`ApplicationFoundry`, outside the installation directory. Set
+`ApplicationFoundry__DataDirectory` to an absolute path to choose another local
+data directory, or configure `ConnectionStrings__DefaultConnection` to use a
+different SQLite connection string. Back up `app.db` before upgrading an
+existing installation.
 
 The fit scorer runs a small ONNX logistic model entirely in the application
 process. Its four visible inputs measure keyword evidence, overall profile
