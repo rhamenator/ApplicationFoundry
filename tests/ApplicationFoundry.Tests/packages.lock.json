@@ -538,8 +538,8 @@
       },
       "SQLitePCLRaw.lib.e_sqlite3": {
         "type": "Transitive",
-        "resolved": "2.1.12",
-        "contentHash": "fWi8Dbknuhgg72fWinIdjXVaqO1hHL4YBBwVLnr7e1c9TAZwJ0QE38j9syW1hwx6HaqEVTwI+O07WPdZn8Rp0w=="
+        "resolved": "2.1.14",
+        "contentHash": "h32f78UhMGzr3l2kO8t1+qp7ItqfbmyAFTLjBHqL13/kNeKOR6K6FhOQe/gOzlHnUSFAYNUt3JoVPAEjFRIB9g=="
       },
       "SQLitePCLRaw.provider.e_sqlite3": {
         "type": "Transitive",
@@ -607,7 +607,7 @@
           "Microsoft.EntityFrameworkCore.Sqlite": "[10.0.10, )",
           "Microsoft.EntityFrameworkCore.Tools": "[10.0.10, )",
           "Microsoft.ML.OnnxRuntime": "[1.28.0, )",
-          "SQLitePCLRaw.lib.e_sqlite3": "[2.1.12, )"
+          "SQLitePCLRaw.lib.e_sqlite3": "[2.1.14, )"
         }
       }
     }
