@@ -95,6 +95,22 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - run: dotnet publish "$PROJECT" -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:Version="$APP_VERSION" -o publish
+      - name: Check Rocky 8 SQLite compatibility
+        run: |
+          python3 - <<'PY'
+          import re
+          import subprocess
+
+          symbols = subprocess.check_output(
+              ["readelf", "--version-info", "publish/libe_sqlite3.so"], text=True
+          )
+          versions = {
+              tuple(map(int, match.groups()))
+              for match in re.finditer(r"GLIBC_(\d+)\.(\d+)", symbols)
+          }
+          if not versions or max(versions) > (2, 28):
+              raise SystemExit(f"SQLite native library needs GLIBC {max(versions, default='unknown')}; Rocky 8 has 2.28")
+          PY
       - name: Smoke-test published app from a different directory
         shell: bash
         run: |
