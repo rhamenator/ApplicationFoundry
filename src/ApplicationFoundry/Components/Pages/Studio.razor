@@ -213,7 +213,7 @@
             pendingSource = await DocumentImporter.ExtractAsync(file.Name, sourceKind, buffer.ToArray());
             message = "Review the extracted text before saving it.";
         }
-        catch (DocumentExtraction.DocumentReadException exception)
+        catch (DocumentImportException exception)
         {
             message = exception.Code switch
             {

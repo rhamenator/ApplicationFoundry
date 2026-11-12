@@ -1,6 +1,5 @@
 using System.Text;
 using ApplicationFoundry.Features.Documents;
-using DocumentExtraction;
 
 namespace ApplicationFoundry.Tests;
 
@@ -30,14 +29,14 @@ public sealed class CandidateDocumentImportTests
 
         Assert.Contains("Built reliable systems", word.ExtractedText);
         Assert.Contains("Avery", pdf.ExtractedText);
-        Assert.Contains("LAYOUT_REVIEW", pdf.ReviewNotes);
+        Assert.Contains("layout needs review", pdf.ReviewNotes, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public async Task Rejects_unsupported_and_mislabeled_files()
     {
         await Assert.ThrowsAsync<ArgumentException>(() => importer.ExtractAsync("resume.doc", "resume", "old"u8.ToArray()));
-        var error = await Assert.ThrowsAsync<DocumentReadException>(() => importer.ExtractAsync("resume.pdf", "resume", "not a PDF"u8.ToArray()));
+        var error = await Assert.ThrowsAsync<DocumentImportException>(() => importer.ExtractAsync("resume.pdf", "resume", "not a PDF"u8.ToArray()));
         Assert.Equal("PDF_SIGNATURE", error.Code);
     }
 }

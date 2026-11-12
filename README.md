@@ -26,9 +26,6 @@ name, suffix, and preferred display name.
 
 ## Run locally
 
-Clone with submodules, or run `git submodule update --init --recursive` in an
-existing checkout. The document extractor is pinned under `external/`.
-
 ```powershell
 dotnet restore --force-evaluate
 dotnet run --project src/ApplicationFoundry
