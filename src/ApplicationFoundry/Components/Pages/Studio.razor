@@ -4,6 +4,7 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IFitScorer FitScorer
 @inject ICareerDocumentService Documents
+@inject IJobDiscoveryService JobDiscovery
 
 <PageTitle>Career studio</PageTitle>
 
@@ -56,7 +57,29 @@
 </section>
 
 <section class="studio-panel">
-    <h2>Import an opportunity</h2>
+    <h2>Find matching remote jobs</h2>
+    <p>Fetch current Remote OK postings and compare them with your saved evidence on this computer. Your profile is not sent to the job board.</p>
+    <button class="btn btn-primary" type="button" disabled="@(isSearching || profile.Id == 0 || profile.Evidence.Count == 0)" @onclick="SearchRemoteJobsAsync">
+        @(isSearching ? "Searching…" : "Find matching jobs")
+    </button>
+    @if (profile.Id == 0 || profile.Evidence.Count == 0)
+    {
+        <p class="text-secondary mt-2">Save a profile and at least one evidence item to search.</p>
+    }
+    @foreach (var result in discoveredJobs)
+    {
+        <article class="job-card mt-3">
+            <div><h3>@result.RoleTitle</h3><p>@result.Organization</p></div>
+            <div class="fit-score"><strong>@result.FitScore.ToString("P0")</strong><span>local fit signal</span></div>
+            <p class="fit-explanation">@result.FitExplanation</p>
+            <p><a href="@result.SourceUrl" target="_blank" rel="noopener noreferrer">View original posting on Remote OK</a></p>
+            <button class="btn btn-sm btn-primary" type="button" @onclick="() => DraftDiscoveredJobAsync(result)">Create drafts for this job</button>
+        </article>
+    }
+</section>
+
+<section class="studio-panel">
+    <h2>Import another opportunity</h2>
     <p>Paste a posting or use this browser-assist bookmarklet on a job page, then paste the copied text here:</p>
     <a class="bookmarklet" href="javascript:(()=>navigator.clipboard.writeText(document.title+'%0A'+location.href+'%0A%0A'+getSelection().toString()))()">Copy selected job</a>
     <EditForm Model="newJob" OnValidSubmit="AddJobAsync" FormName="job">
@@ -104,6 +127,8 @@
     private EvidenceItem newEvidence = new();
     private JobOpportunity newJob = new();
     private List<JobOpportunity> jobs = [];
+    private IReadOnlyList<DiscoveredJob> discoveredJobs = [];
+    private bool isSearching;
     private string userId = "";
     private string message = "";
 
@@ -119,8 +144,9 @@
         await using var db = await DbFactory.CreateDbContextAsync();
         profile = await db.CandidateProfiles.Include(item => item.Evidence).SingleOrDefaultAsync(item => item.UserId == userId)
             ?? new CandidateProfile { UserId = userId };
-        jobs = await db.JobOpportunities.Include(job => job.Documents).Include(job => job.Activities)
-            .Where(job => job.UserId == userId).OrderByDescending(job => job.ImportedAt).ToListAsync();
+        jobs = (await db.JobOpportunities.Include(job => job.Documents).Include(job => job.Activities)
+            .Where(job => job.UserId == userId).ToListAsync())
+            .OrderByDescending(job => job.ImportedAt).ToList();
     }
 
     private async Task SaveProfileAsync()
@@ -161,6 +187,38 @@
         newJob = new JobOpportunity();
         message = "Opportunity analyzed; review both drafts before approval.";
         await ReloadAsync();
+    }
+
+    private async Task SearchRemoteJobsAsync()
+    {
+        isSearching = true;
+        message = "";
+        try
+        {
+            discoveredJobs = await JobDiscovery.FindMatchesAsync(profile);
+            if (discoveredJobs.Count == 0) message = "No matching remote jobs were available from Remote OK right now.";
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            message = "Job search is temporarily unavailable. Try again later or import a posting below.";
+        }
+        finally
+        {
+            isSearching = false;
+        }
+    }
+
+    private async Task DraftDiscoveredJobAsync(DiscoveredJob result)
+    {
+        newJob = new JobOpportunity
+        {
+            RoleTitle = result.RoleTitle,
+            Organization = result.Organization,
+            SourceUrl = result.SourceUrl,
+            Description = result.Description
+        };
+        await AddJobAsync();
+        discoveredJobs = [];
     }
 
     private async Task ApproveAsync(int documentId)

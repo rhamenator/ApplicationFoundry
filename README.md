@@ -1,9 +1,17 @@
 # Application Foundry
 
-Application Foundry is a local-first career studio built on .NET 10, ASP.NET
-Core, Blazor, Identity, and SQLite. It keeps a standardized candidate profile,
-an evidence library, imported job descriptions, versioned resume and cover
-letter drafts, explainable local fit signals, and an application activity log.
+Application Foundry is being built as a local-first reverse recruiter. Its goal
+is to help an applicant discover relevant jobs, compare them with a durable
+record of experience, prepare tailored applications, and track each employer
+through interviews and follow-up. The applicant reviews drafts and controls
+what is sent to an employer.
+
+The current release is an early slice of that workflow. It has a candidate
+profile, evidence library, local fit signals, versioned resume and cover letter
+drafts, approval before export, and an activity log. The experimental desktop
+branch adds a Remote OK feed whose listings are ranked locally; broader job
+discovery, application form assistance, and the full follow-up workflow remain
+in development.
 
 Name data uses these explicit fields: title, first name, middle initial(s), last
 name, suffix, and preferred display name.

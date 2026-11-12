@@ -49,6 +49,23 @@ public sealed class CareerWorkflowTests
     }
 
     [Fact]
+    public void Managed_desktop_matcher_agrees_with_onnx_model()
+    {
+        var job = new JobOpportunity
+        {
+            RoleTitle = "Distributed systems engineer",
+            Description = "Build reliable distributed services using Rust and lead operations reviews."
+        };
+        using var onnx = new OnnxFitScorer();
+        var native = onnx.Score(Profile(), job);
+        var managed = new ManagedFitScorer().Score(Profile(), job);
+
+        Assert.InRange(Math.Abs(native.Score - managed.Score), 0, 0.00001f);
+        Assert.Equal(native.Features, managed.Features);
+        Assert.Equal(native.Explanation, managed.Explanation);
+    }
+
+    [Fact]
     public void Drafts_are_grounded_in_recorded_evidence()
     {
         var service = new CareerDocumentService();
