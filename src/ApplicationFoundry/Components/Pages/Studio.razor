@@ -8,6 +8,7 @@
 @inject IClientDocumentExport ClientExport
 @inject IJobDiscoveryService JobDiscovery
 @inject GreenhouseJobDiscoveryService GreenhouseDiscovery
+@inject IJSRuntime JS
 
 <PageTitle>Career studio</PageTitle>
 
@@ -299,11 +300,14 @@
                         @if (IsFormMatchAuthorized(job))
                         {
                             <p class="mt-2">Authorized for this exact form match until @formDrafts[job.Id].FormAuthorization!.AuthorizedAt.Add(FormFillAuthorizer.MaxAge).ToLocalTime().ToString("g"). No values were entered or sent.</p>
+                            <p>Drag this fill link to your browser bookmarks once. Then copy the approved packet and use that bookmark on the same employer form. The clipboard will contain your reviewed answers until replaced. Inspect the filled form before submitting it yourself.</p>
+                            <a class="bookmarklet" href="@EmployerFormFillBookmarklet.Href">Fill approved values</a>
+                            <button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => CopyApprovedFillPacketAsync(job.Id)">Copy approved fill packet</button>
                         }
                     }
                 }
                 <h4 class="mt-3">Values entered in the employer form</h4>
-                <p>After entering a value on the employer's site, record the exact value here. This does not fill or send the form.</p>
+                <p>After using the browser helper or entering a value yourself, verify and record the exact value here. This record does not send the form.</p>
                 @if (job.FormPlan is not null)
                 {
                     @foreach (var entry in job.FormPlan.Entries.OrderBy(entry => entry.Id))
@@ -939,6 +943,36 @@
         var draft = formDrafts[job.Id];
         return EmployerFormSnapshotCodec.TryParse(draft.SnapshotJson, out var snapshot, out _) &&
             FormFillAuthorizer.IsCurrent(job, snapshot!, draft.FormAuthorization);
+    }
+
+    private async Task CopyApprovedFillPacketAsync(int jobId)
+    {
+        var draft = formDrafts[jobId];
+        if (!EmployerFormSnapshotCodec.TryParse(draft.SnapshotJson, out var snapshot, out _))
+        {
+            draft.FormAuthorization = null;
+            message = "The form snapshot changed. Preview and authorize it again.";
+            return;
+        }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.Include(item => item.FormPlan).ThenInclude(plan => plan!.Answers)
+            .SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        var packet = job is null ? null : BrowserFormFillPacketBuilder.Create(job, snapshot!, draft.FormAuthorization);
+        if (packet is null)
+        {
+            draft.FormAuthorization = null;
+            message = "The authorization expired or the reviewed packet changed. Preview and authorize it again.";
+            return;
+        }
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", BrowserFormFillPacketBuilder.ToJson(packet));
+            message = "Approved form values copied for this exact page. Use the fill bookmarklet before authorization expires, then inspect and record what was entered. Nothing was submitted.";
+        }
+        catch (JSException)
+        {
+            message = "The browser could not access the clipboard. No form values were copied or entered.";
+        }
     }
 
     private sealed class FormPlanDraft
