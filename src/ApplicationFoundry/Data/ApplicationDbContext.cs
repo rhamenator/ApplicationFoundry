@@ -11,6 +11,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<JobOpportunity> JobOpportunities => Set<JobOpportunity>();
     public DbSet<DocumentVersion> DocumentVersions => Set<DocumentVersion>();
     public DbSet<ApplicationActivity> ApplicationActivities => Set<ApplicationActivity>();
+    public DbSet<ApplicationFormPlan> ApplicationFormPlans => Set<ApplicationFormPlan>();
+    public DbSet<ApplicationFormAnswer> ApplicationFormAnswers => Set<ApplicationFormAnswer>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -32,6 +34,16 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasOne<JobOpportunity>()
             .WithMany(job => job.Activities)
             .HasForeignKey(activity => activity.JobOpportunityId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<ApplicationFormPlan>()
+            .HasOne<JobOpportunity>()
+            .WithOne(job => job.FormPlan)
+            .HasForeignKey<ApplicationFormPlan>(plan => plan.JobOpportunityId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<ApplicationFormAnswer>()
+            .HasOne<ApplicationFormPlan>()
+            .WithMany(plan => plan.Answers)
+            .HasForeignKey(answer => answer.ApplicationFormPlanId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

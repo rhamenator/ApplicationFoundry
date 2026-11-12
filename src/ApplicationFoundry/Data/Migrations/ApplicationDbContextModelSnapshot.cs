@@ -46,6 +46,68 @@ namespace ApplicationFoundry.Migrations
                     b.ToTable("ApplicationActivities");
                 });
 
+            modelBuilder.Entity("ApplicationFoundry.Data.ApplicationFormAnswer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Answer")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ApplicationFormPlanId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("FieldLabel")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("ReviewedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApplicationFormPlanId");
+
+                    b.ToTable("ApplicationFormAnswers");
+                });
+
+            modelBuilder.Entity("ApplicationFoundry.Data.ApplicationFormPlan", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("JobOpportunityId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Mode")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Rules")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JobOpportunityId")
+                        .IsUnique();
+
+                    b.ToTable("ApplicationFormPlans");
+                });
+
             modelBuilder.Entity("ApplicationFoundry.Data.ApplicationUser", b =>
                 {
                     b.Property<string>("Id")
@@ -508,6 +570,24 @@ namespace ApplicationFoundry.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ApplicationFoundry.Data.ApplicationFormAnswer", b =>
+                {
+                    b.HasOne("ApplicationFoundry.Data.ApplicationFormPlan", null)
+                        .WithMany("Answers")
+                        .HasForeignKey("ApplicationFormPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ApplicationFoundry.Data.ApplicationFormPlan", b =>
+                {
+                    b.HasOne("ApplicationFoundry.Data.JobOpportunity", null)
+                        .WithOne("FormPlan")
+                        .HasForeignKey("ApplicationFoundry.Data.ApplicationFormPlan", "JobOpportunityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ApplicationFoundry.Data.DocumentVersion", b =>
                 {
                     b.HasOne("ApplicationFoundry.Data.JobOpportunity", null)
@@ -628,6 +708,11 @@ namespace ApplicationFoundry.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ApplicationFoundry.Data.ApplicationFormPlan", b =>
+                {
+                    b.Navigation("Answers");
+                });
+
             modelBuilder.Entity("ApplicationFoundry.Data.CandidateProfile", b =>
                 {
                     b.Navigation("Evidence");
@@ -638,6 +723,8 @@ namespace ApplicationFoundry.Migrations
                     b.Navigation("Activities");
 
                     b.Navigation("Documents");
+
+                    b.Navigation("FormPlan");
                 });
 #pragma warning restore 612, 618
         }

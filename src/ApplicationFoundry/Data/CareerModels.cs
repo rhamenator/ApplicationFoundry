@@ -71,6 +71,29 @@ public sealed class JobOpportunity
     [MaxLength(2000)] public string FitExplanation { get; set; } = "";
     public List<DocumentVersion> Documents { get; set; } = [];
     public List<ApplicationActivity> Activities { get; set; } = [];
+    public ApplicationFormPlan? FormPlan { get; set; }
+}
+
+public enum FormSubmissionMode { SubmitPersonally, ApproveEachSubmission, AutomaticWithinRules }
+
+public sealed class ApplicationFormPlan
+{
+    public int Id { get; set; }
+    public int JobOpportunityId { get; set; }
+    public FormSubmissionMode Mode { get; set; } = FormSubmissionMode.SubmitPersonally;
+    [MaxLength(2000)] public string Rules { get; set; } = "";
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public List<ApplicationFormAnswer> Answers { get; set; } = [];
+}
+
+public sealed class ApplicationFormAnswer
+{
+    public int Id { get; set; }
+    public int ApplicationFormPlanId { get; set; }
+    [Required, MaxLength(200)] public string FieldLabel { get; set; } = "";
+    [Required, MaxLength(4000)] public string Answer { get; set; } = "";
+    [Required, MaxLength(240)] public string Source { get; set; } = "";
+    public DateTimeOffset ReviewedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
 public enum CareerDocumentKind { Resume, CoverLetter }

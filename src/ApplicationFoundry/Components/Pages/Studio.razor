@@ -200,6 +200,38 @@
                     }
                 </details>
             }
+            <details class="mt-2">
+                <summary>Application form preparation · @(job.FormPlan is null ? "not started" : job.FormPlan.Mode.ToString())</summary>
+                <p class="mt-2">Prepare answers for this employer's form. Choose how much submission assistance you want. This version saves your preference and answers locally; it does not fill or submit an employer form.</p>
+                <label>Submission preference
+                    <select class="form-select" @bind="formDrafts[job.Id].Mode">
+                        <option value="SubmitPersonally">Review and submit personally</option>
+                        <option value="ApproveEachSubmission">Approve each submission</option>
+                        <option value="AutomaticWithinRules">Automatic submission within my rules</option>
+                    </select>
+                </label>
+                <label>My submission rules<textarea class="form-control" rows="2" @bind="formDrafts[job.Id].Rules"></textarea></label>
+                <button class="btn btn-sm btn-outline-primary mt-2" type="button" @onclick="() => SaveFormPlanAsync(job.Id)">Save preference</button>
+                <h4 class="mt-3">Prepared answers</h4>
+                @if (job.FormPlan is not null)
+                {
+                    @foreach (var answer in job.FormPlan.Answers.OrderBy(answer => answer.Id))
+                    {
+                        <p><strong>@answer.FieldLabel:</strong> @answer.Answer <span class="text-secondary">· source: @answer.Source · reviewed @answer.ReviewedAt.ToLocalTime().ToString("g")</span></p>
+                    }
+                }
+                <div class="profile-grid">
+                    <label>Form question or field<input class="form-control" @bind="formDrafts[job.Id].FieldLabel" /></label>
+                    <label>Source of this answer<input class="form-control" @bind="formDrafts[job.Id].Source" /></label>
+                </div>
+                <label>Answer<textarea class="form-control" rows="3" @bind="formDrafts[job.Id].Answer"></textarea></label>
+                <div class="mt-2">
+                    <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="() => UseProfileFact(job.Id, ProfileFact.FullName)">Use saved name</button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="() => UseProfileFact(job.Id, ProfileFact.Email)">Use saved email</button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="() => UseProfileFact(job.Id, ProfileFact.Phone)">Use saved phone</button>
+                </div>
+                <button class="btn btn-sm btn-outline-primary mt-2" type="button" @onclick="() => AddPreparedAnswerAsync(job.Id)">Save reviewed answer</button>
+            </details>
             <button class="btn btn-sm btn-outline-primary" @onclick="() => MarkSubmittedAsync(job.Id)">Record manual submission</button>
         </article>
     }
@@ -210,6 +242,7 @@
     private EvidenceItem newEvidence = new();
     private JobOpportunity newJob = new();
     private List<JobOpportunity> jobs = [];
+    private Dictionary<int, FormPlanDraft> formDrafts = [];
     private List<CandidateSourceDocument> sourceDocuments = [];
     private CandidateDocumentImport? pendingSource;
     private int mappingSourceId;
@@ -239,8 +272,14 @@
         profile = await db.CandidateProfiles.Include(item => item.Evidence).SingleOrDefaultAsync(item => item.UserId == userId)
             ?? new CandidateProfile { UserId = userId };
         jobs = (await db.JobOpportunities.Include(job => job.Documents).Include(job => job.Activities)
+            .Include(job => job.FormPlan).ThenInclude(plan => plan!.Answers)
             .Where(job => job.UserId == userId).ToListAsync())
             .OrderByDescending(job => job.ImportedAt).ToList();
+        formDrafts = jobs.ToDictionary(job => job.Id, job => new FormPlanDraft
+        {
+            Mode = job.FormPlan?.Mode ?? FormSubmissionMode.SubmitPersonally,
+            Rules = job.FormPlan?.Rules ?? ""
+        });
         sourceDocuments = (await db.CandidateSourceDocuments.Where(source => source.UserId == userId).ToListAsync())
             .OrderByDescending(source => source.ImportedAt).ToList();
     }
@@ -480,5 +519,102 @@
         await db.SaveChangesAsync();
         message = "Manual submission recorded. No external form was automated.";
         await ReloadAsync();
+    }
+
+    private enum ProfileFact { FullName, Email, Phone }
+
+    private void UseProfileFact(int jobId, ProfileFact field)
+    {
+        var answer = field switch
+        {
+            ProfileFact.FullName => profile.DisplayName,
+            ProfileFact.Email => profile.Email,
+            ProfileFact.Phone => profile.Phone,
+            _ => ""
+        };
+        if (string.IsNullOrWhiteSpace(answer))
+        {
+            message = $"Save a {field.ToString().ToLowerInvariant()} in your profile first.";
+            return;
+        }
+        var draft = formDrafts[jobId];
+        draft.FieldLabel = field == ProfileFact.FullName ? "Full name" : field.ToString();
+        draft.Answer = answer;
+        draft.Source = "Saved profile";
+        message = "Review this suggested answer before saving it.";
+    }
+
+    private bool ValidateFormPlan(FormPlanDraft draft)
+    {
+        if (!Enum.IsDefined(draft.Mode))
+        {
+            message = "Choose a submission preference.";
+            return false;
+        }
+        if (draft.Rules.Length > 2000 ||
+            (draft.Mode == FormSubmissionMode.AutomaticWithinRules && string.IsNullOrWhiteSpace(draft.Rules)))
+        {
+            message = "Enter submission rules of 2000 characters or fewer for automatic mode.";
+            return false;
+        }
+        return true;
+    }
+
+    private async Task SaveFormPlanAsync(int jobId)
+    {
+        var draft = formDrafts[jobId];
+        if (!ValidateFormPlan(draft)) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.Include(item => item.FormPlan)
+            .SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        if (job is null) return;
+        job.FormPlan ??= new ApplicationFormPlan();
+        job.FormPlan.Mode = draft.Mode;
+        job.FormPlan.Rules = draft.Rules.Trim();
+        job.FormPlan.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+        message = "Submission preference saved locally. Employer form submission is not automated yet.";
+        await ReloadAsync();
+    }
+
+    private async Task AddPreparedAnswerAsync(int jobId)
+    {
+        var draft = formDrafts[jobId];
+        if (!ValidateFormPlan(draft)) return;
+        var field = draft.FieldLabel.Trim();
+        var answer = draft.Answer.Trim();
+        var source = draft.Source.Trim();
+        if (field.Length is < 1 or > 200 || answer.Length is < 1 or > 4000 || source.Length is < 1 or > 240)
+        {
+            message = "Enter a form field (up to 200 characters), answer (up to 4000), and source (up to 240).";
+            return;
+        }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.Include(item => item.FormPlan)
+            .SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        if (job is null) return;
+        job.FormPlan ??= new ApplicationFormPlan();
+        job.FormPlan.Mode = draft.Mode;
+        job.FormPlan.Rules = draft.Rules.Trim();
+        job.FormPlan.UpdatedAt = DateTimeOffset.UtcNow;
+        job.FormPlan.Answers.Add(new ApplicationFormAnswer
+        {
+            FieldLabel = field,
+            Answer = answer,
+            Source = source,
+            ReviewedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        message = "Reviewed answer saved locally. No employer form was filled or submitted.";
+        await ReloadAsync();
+    }
+
+    private sealed class FormPlanDraft
+    {
+        public FormSubmissionMode Mode { get; set; }
+        public string Rules { get; set; } = "";
+        public string FieldLabel { get; set; } = "";
+        public string Answer { get; set; } = "";
+        public string Source { get; set; } = "";
     }
 }
