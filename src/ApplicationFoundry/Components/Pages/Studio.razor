@@ -239,7 +239,23 @@
                     </select>
                 </label>
                 <label>My submission rules<textarea class="form-control" rows="2" @bind="formDrafts[job.Id].Rules"></textarea></label>
+                @if (formDrafts[job.Id].Mode == FormSubmissionMode.AutomaticWithinRules)
+                {
+                    <p class="text-secondary">For the local automatic-rule check, enter one rule per line: <code>organization=Employer name</code> and <code>minimum-fit=50</code>. Other or repeated rules block the check. This check does not inspect or send an employer form.</p>
+                }
                 <button class="btn btn-sm btn-outline-primary mt-2" type="button" @onclick="() => SaveFormPlanAsync(job.Id)">Save preference</button>
+                @if (job.FormPlan?.Mode == FormSubmissionMode.AutomaticWithinRules)
+                {
+                    <button class="btn btn-sm btn-outline-secondary mt-2" type="button" @onclick="() => CheckAutomaticRules(job.Id)">Check automatic rules locally</button>
+                    @if (ruleResults.TryGetValue(job.Id, out var result))
+                    {
+                        <p class="mt-2"><strong>@(result.MatchesLocalRules ? "Local rules match" : "Local rules block this opportunity")</strong> · No employer form was inspected or sent.</p>
+                        @foreach (var reason in result.Reasons)
+                        {
+                            <p>@reason</p>
+                        }
+                    }
+                }
                 <h4 class="mt-3">Prepared answers</h4>
                 @if (job.FormPlan is not null)
                 {
@@ -323,6 +339,7 @@
     private JobOpportunity newJob = new();
     private List<JobOpportunity> jobs = [];
     private Dictionary<int, FormPlanDraft> formDrafts = [];
+    private Dictionary<int, AutomaticRuleResult> ruleResults = [];
     private Dictionary<int, FollowUpDraft> followUpDrafts = [];
     private List<CandidateSourceDocument> sourceDocuments = [];
     private CandidateDocumentImport? pendingSource;
@@ -368,6 +385,7 @@
             Mode = job.FormPlan?.Mode ?? FormSubmissionMode.SubmitPersonally,
             Rules = job.FormPlan?.Rules ?? ""
         });
+        ruleResults.Clear();
         followUpDrafts = jobs.ToDictionary(job => job.Id, job => new FollowUpDraft
         {
             DueOn = job.NextFollowUpOn?.ToDateTime(TimeOnly.MinValue)
@@ -751,6 +769,12 @@
             return false;
         }
         return true;
+    }
+
+    private void CheckAutomaticRules(int jobId)
+    {
+        var job = jobs.Single(item => item.Id == jobId);
+        ruleResults[jobId] = AutomaticSubmissionRuleEvaluator.Evaluate(job);
     }
 
     private async Task SaveFormPlanAsync(int jobId)
