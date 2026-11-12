@@ -307,7 +307,24 @@
                     }
                 }
                 <h4 class="mt-3">Values entered in the employer form</h4>
-                <p>After using the browser helper or entering a value yourself, verify and record the exact value here. This record does not send the form.</p>
+                <p>After the browser helper fills the form, inspect every value on the employer page. Paste its entry receipt here to review and record what was entered. Recording does not submit the form.</p>
+                @if (job.Status != OpportunityStatus.Submitted)
+                {
+                    <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="() => PasteBrowserReceiptAsync(job.Id)">Paste browser receipt from clipboard</button>
+                    <label>Browser entry receipt<textarea class="form-control" rows="3" maxlength="512000" @bind="formDrafts[job.Id].BrowserReceiptJson"></textarea></label>
+                    <button class="btn btn-sm btn-outline-secondary mt-2" type="button" @onclick="() => PreviewBrowserReceiptAsync(job.Id)">Review browser receipt</button>
+                    @if (formDrafts[job.Id].ReceiptPreviewValues is { Count: > 0 } receiptValues)
+                    {
+                        <p class="mt-2">The browser receipt reports these exact values as entered:</p>
+                        @foreach (var value in receiptValues)
+                        {
+                            <p><strong>@value.Label:</strong> @value.Value</p>
+                        }
+                        <label><input type="checkbox" @bind="formDrafts[job.Id].ConfirmObservedEntries" /> I inspected the employer form and confirm these exact values are present.</label>
+                        <button class="btn btn-sm btn-outline-primary mt-2" type="button" @onclick="() => RecordBrowserReceiptAsync(job.Id)">Record these entered values</button>
+                    }
+                }
+                <p>You can also record a field yourself after checking it on the employer page.</p>
                 @if (job.FormPlan is not null)
                 {
                     @foreach (var entry in job.FormPlan.Entries.OrderBy(entry => entry.Id))
@@ -975,6 +992,62 @@
         }
     }
 
+    private async Task PasteBrowserReceiptAsync(int jobId)
+    {
+        try
+        {
+            formDrafts[jobId].BrowserReceiptJson = await JS.InvokeAsync<string>("navigator.clipboard.readText");
+            await PreviewBrowserReceiptAsync(jobId);
+        }
+        catch (JSException)
+        {
+            message = "Clipboard access was unavailable. Paste the browser receipt into the box instead.";
+        }
+    }
+
+    private async Task PreviewBrowserReceiptAsync(int jobId)
+    {
+        var draft = formDrafts[jobId];
+        draft.ReceiptPreviewValues = null;
+        draft.ReceiptPreviewJson = "";
+        draft.ConfirmObservedEntries = false;
+        if (!EmployerFormSnapshotCodec.TryParse(draft.SnapshotJson, out var snapshot, out _))
+        {
+            message = "Preview and authorize the current employer form before reviewing its receipt.";
+            return;
+        }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.Include(item => item.FormPlan).ThenInclude(plan => plan!.Answers)
+            .SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        var packet = job is null ? null : BrowserFormFillPacketBuilder.Create(job, snapshot!, draft.FormAuthorization);
+        if (packet is null || !BrowserFormFillReceiptValidator.TryMatch(draft.BrowserReceiptJson, packet, out var entered, out _))
+        {
+            message = "The browser receipt does not match the current authorized form. Preview and authorize again if it changed.";
+            return;
+        }
+        draft.ReceiptPreviewValues = entered;
+        draft.ReceiptPreviewJson = draft.BrowserReceiptJson;
+        message = "Review the values reported by the browser against the employer page before recording them.";
+    }
+
+    private async Task RecordBrowserReceiptAsync(int jobId)
+    {
+        var draft = formDrafts[jobId];
+        if (draft.ReceiptPreviewValues is not { Count: > 0 } ||
+            draft.BrowserReceiptJson != draft.ReceiptPreviewJson ||
+            !EmployerFormSnapshotCodec.TryParse(draft.SnapshotJson, out var snapshot, out _))
+        {
+            message = "The receipt changed. Review it again before recording.";
+            return;
+        }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var result = await BrowserFormEntryRecorder.RecordAsync(db, jobId, userId, snapshot!,
+            draft.FormAuthorization, draft.BrowserReceiptJson, draft.ConfirmObservedEntries);
+        message = result.Reason;
+        if (result.Recorded)
+            await ReloadAsync();
+    }
+
     private sealed class FormPlanDraft
     {
         public FormSubmissionMode Mode { get; set; }
@@ -989,6 +1062,10 @@
         public FormFillProposal? FormPreview { get; set; }
         public string PreviewFingerprint { get; set; } = "";
         public FormFillAuthorization? FormAuthorization { get; set; }
+        public string BrowserReceiptJson { get; set; } = "";
+        public string ReceiptPreviewJson { get; set; } = "";
+        public IReadOnlyList<ProposedFieldValue>? ReceiptPreviewValues { get; set; }
+        public bool ConfirmObservedEntries { get; set; }
     }
 
     private sealed class FollowUpDraft
