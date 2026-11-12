@@ -3,8 +3,8 @@
 Application Foundry is being built as a local-first reverse recruiter. Its goal
 is to help an applicant discover relevant jobs, compare them with a durable
 record of experience, prepare tailored applications, and track each employer
-through interviews and follow-up. The applicant reviews drafts and controls
-what is sent to an employer.
+through interviews and follow-up. The applicant controls what is sent to an
+employer.
 
 The current release is an early slice of that workflow. It has a candidate
 profile, evidence library, local fit signals, versioned resume and cover letter
@@ -15,8 +15,10 @@ in development.
 
 Application form assistance is part of the intended workflow, reflecting the
 original Access databases. The app should reuse verified profile details and
-saved answers to prepare employer-specific form entries for the applicant to
-review. The current prototype does not fill external forms.
+saved answers to prepare employer-specific form entries. Each applicant should
+be able to choose the level of assistance: review and submit personally,
+approve each submission, or authorize automatic submission within rules they
+set. The current prototype does not fill or submit external forms.
 
 Name data uses these explicit fields: title, first name, middle initial(s), last
 name, suffix, and preferred display name.
@@ -55,9 +57,9 @@ hiring prediction. Users see an explanation and unmatched terms.
 
 DOCX and PDF exports are blocked until the signed-in user approves that exact
 document version. The included browser-assist bookmarklet only copies a page
-title, URL, and selected text. Application Foundry never bypasses CAPTCHA,
-submits external forms, or sends unattended batches. A user records submission
-only after completing it manually.
+title, URL, and selected text. The current app does not bypass CAPTCHA, submit
+external forms, or send unattended batches. A user records submission only
+after completing it manually.
 
 The default no-op email sender is suitable only for local development. Configure
 a real sender, durable data-protection keys, HTTPS termination, and production
