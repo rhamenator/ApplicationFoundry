@@ -43,6 +43,11 @@ Keep the Application Foundry console window open while using the app; closing
 it stops the local server. The setup wizard can launch the app when installation
 finishes.
 
+Pull request builds also produce a separate **Application Foundry Desktop
+Prototype** installer. Its Start menu shortcut opens a desktop window without
+the server console. The desktop prototype is experimental and does not yet
+support document export or external application forms.
+
 The fit scorer runs a small ONNX logistic model entirely in the application
 process. Its four visible inputs measure keyword evidence, overall profile
 coverage, role-title alignment, and evidence depth. It is a drafting aid, not a
