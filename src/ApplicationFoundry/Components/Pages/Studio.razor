@@ -280,7 +280,7 @@
                 <p>Drag this link to your browser bookmarks. On the employer's application form, use the bookmark to copy its structure, then paste it below. It reads field labels and choices, never your entered values. The preview stays on this computer and does not enter or send values.</p>
                 <a class="bookmarklet" href="@EmployerFormSnapshotBookmarklet.Href">Copy form structure</a>
                 <details><summary>Form snapshot format</summary><pre>{"url":"https://example.test/apply","fields":[{"key":"email","label":"Email","type":"email","required":true}]}</pre></details>
-                <label>Form snapshot JSON<textarea class="form-control" rows="4" maxlength="65536" @bind="formDrafts[job.Id].SnapshotJson"></textarea></label>
+                <label>Form snapshot JSON<textarea class="form-control" rows="4" maxlength="65536" @bind="formDrafts[job.Id].SnapshotJson" @bind:event="oninput"></textarea></label>
                 <button class="btn btn-sm btn-outline-secondary mt-2" type="button" @onclick="() => PreviewFormMatch(job.Id)">Preview reviewed answers</button>
                 @if (formDrafts[job.Id].FormPreview is { } preview)
                 {
