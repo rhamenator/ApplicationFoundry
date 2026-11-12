@@ -28,6 +28,8 @@ public sealed class BrowserFormFillPacketBuilderTests
         using (var json = JsonDocument.Parse(BrowserFormFillPacketBuilder.ToJson(packet)))
         {
             Assert.Equal("https://example.test/apply", json.RootElement.GetProperty("url").GetString());
+            Assert.Equal(42, json.RootElement.GetProperty("jobId").GetInt32());
+            Assert.Equal(64, json.RootElement.GetProperty("authorizationFingerprint").GetString()!.Length);
             Assert.Equal("avery@example.test", json.RootElement.GetProperty("values")[0].GetProperty("value").GetString());
             Assert.False(json.RootElement.GetProperty("fields")[0].TryGetProperty("options", out _));
         }

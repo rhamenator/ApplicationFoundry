@@ -5,7 +5,9 @@ using ApplicationFoundry.Data;
 namespace ApplicationFoundry.Features.Forms;
 
 public sealed record BrowserFormFillPacket(
+    int JobId,
     string Url,
+    string AuthorizationFingerprint,
     IReadOnlyList<EmployerFormField> Fields,
     IReadOnlyList<ProposedFieldValue> Values,
     DateTimeOffset ExpiresAt);
@@ -23,7 +25,8 @@ public static class BrowserFormFillPacketBuilder
             return null;
         var proposal = EmployerFormFillPlanner.Prepare(job, form);
         return proposal.IsComplete
-            ? new BrowserFormFillPacket(form.Url.AbsoluteUri, form.Fields, proposal.Values,
+            ? new BrowserFormFillPacket(job.Id, form.Url.AbsoluteUri, authorization!.Fingerprint,
+                form.Fields, proposal.Values,
                 authorization!.AuthorizedAt.Add(FormFillAuthorizer.MaxAge))
             : null;
     }

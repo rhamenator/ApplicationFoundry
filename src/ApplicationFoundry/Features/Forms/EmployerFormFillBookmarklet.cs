@@ -14,7 +14,9 @@ public static class EmployerFormFillBookmarklet
           let packet;
           try { packet = JSON.parse(raw); }
           catch { return fail('The fill packet is not valid JSON.'); }
-          if (!packet || packet.url !== location.href ||
+          if (!packet || !Number.isInteger(packet.jobId) ||
+              typeof packet.authorizationFingerprint !== 'string' ||
+              packet.authorizationFingerprint.length !== 64 || packet.url !== location.href ||
               !Array.isArray(packet.fields) || !Array.isArray(packet.values) ||
               packet.values.length < 1 || packet.values.length > 100)
             return fail('The packet does not match this page.');
@@ -60,7 +62,7 @@ public static class EmployerFormFillBookmarklet
               if (matches.length !== 1) return fail('A proposed choice is unavailable or ambiguous.');
               nextValue = matches[0].value;
             }
-            actions.push([elements[index], nextValue]);
+            actions.push([elements[index], nextValue, value, fields[index].type]);
           }
           if (fields.some(field => field.required && !seen.has(field.key)))
             return fail('A required field has no reviewed value.');
@@ -69,7 +71,28 @@ public static class EmployerFormFillBookmarklet
             element.dispatchEvent(new Event('input', { bubbles: true }));
             element.dispatchEvent(new Event('change', { bubbles: true }));
           }
-          alert('Application Foundry filled ' + actions.length + ' field(s). Review the page before submitting it yourself.');
+          const observed = [];
+          for (const [element, assigned, proposed, type] of actions) {
+            if (element.value !== assigned)
+              return fail('The page changed a field after filling. Inspect it manually.');
+            observed.push({
+              key: proposed.key,
+              label: proposed.label,
+              value: type === 'select' ? element.selectedOptions[0].textContent.trim() : element.value
+            });
+          }
+          const receipt = JSON.stringify({
+            jobId: packet.jobId,
+            url: packet.url,
+            authorizationFingerprint: packet.authorizationFingerprint,
+            values: observed
+          });
+          try {
+            await navigator.clipboard.writeText(receipt);
+            alert('Application Foundry filled ' + actions.length + ' field(s) and copied an entry receipt. Inspect the form before submitting it yourself, then return to the app to record the values.');
+          } catch {
+            prompt('Copy this entry receipt into Application Foundry after inspecting the form:', receipt);
+          }
         })();
         """;
 

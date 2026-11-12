@@ -23,7 +23,9 @@ def run_fixture(directory: Path, changed: bool) -> dict:
     fixture = (directory / ("changed.html" if changed else "matching.html")).resolve()
     label = "Email changed" if changed else "Email"
     packet = {
+        "jobId": 42,
         "url": fixture.as_uri(),
+        "authorizationFingerprint": "A" * 64,
         "fields": [
             {"key": "email", "label": "Email", "type": "email", "required": True},
             {"key": "availability", "label": "Availability", "type": "select",
@@ -44,11 +46,13 @@ def run_fixture(directory: Path, changed: bool) -> dict:
         '<button type="submit">Submit</button></form><output id="capture"></output><script>'
         'window.submissions=0;document.querySelector("form").addEventListener("submit",'
         'event=>{event.preventDefault();window.submissions++});'
-        'Object.defineProperty(navigator,"clipboard",{value:{readText:()=>Promise.resolve('
-        + json.dumps(raw) + ')}});'
+        'window.receipt=null;Object.defineProperty(navigator,"clipboard",{value:{'
+        'readText:()=>Promise.resolve(' + json.dumps(raw) + '),'
+        'writeText:text=>{window.receipt=text;return Promise.resolve();}}});'
         'window.alert=message=>{document.querySelector("#capture").textContent=JSON.stringify('
         '{message,email:document.querySelector("#email").value,'
-        'availability:document.querySelector("#availability").value,submissions:window.submissions})};'
+        'availability:document.querySelector("#availability").value,'
+        'submissions:window.submissions,receipt:window.receipt})};'
         + match.group(1) + '</script>'
     )
     result = subprocess.run(
@@ -69,10 +73,17 @@ with tempfile.TemporaryDirectory(dir=repo) as directory:
     assert matching["email"] == "avery@example.test", matching
     assert matching["availability"] == "soon", matching
     assert matching["submissions"] == 0, matching
+    receipt = json.loads(matching["receipt"])
+    assert receipt["jobId"] == 42, receipt
+    assert receipt["values"] == [
+        {"key": "email", "label": "Email", "value": "avery@example.test"},
+        {"key": "availability", "label": "Availability", "value": "Two weeks"},
+    ], receipt
     changed = run_fixture(folder, True)
     assert changed["email"] == "", changed
     assert changed["availability"] == "", changed
     assert changed["submissions"] == 0, changed
+    assert changed["receipt"] is None, changed
     assert "changed" in changed["message"].lower(), changed
 
-print("Synthetic Chromium fill passed: exact form filled, changed form blocked, no submission.")
+print("Synthetic Chromium fill passed: exact values receipted, changed form blocked, no submission.")
