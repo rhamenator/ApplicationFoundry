@@ -2,6 +2,7 @@ using ApplicationFoundry.Data;
 using ApplicationFoundry.Features.Documents;
 using ApplicationFoundry.Features.Fit;
 using System.IO.Compression;
+using UglyToad.PdfPig;
 
 namespace ApplicationFoundry.Tests;
 
@@ -91,5 +92,19 @@ public sealed class CareerWorkflowTests
         Assert.StartsWith("%PDF-1.4", text);
         Assert.Contains("xref", text);
         Assert.EndsWith("%%EOF\n", text);
+    }
+
+    [Fact]
+    public void Pdf_keeps_content_beyond_the_first_page()
+    {
+        var content = string.Join('\n', Enumerable.Range(1, 60).Select(index => $"Evidence line {index}"));
+        var bytes = new CareerDocumentService().ToPdf(content);
+        var text = System.Text.Encoding.ASCII.GetString(bytes);
+
+        Assert.Contains("/Count 2", text);
+        Assert.Contains("Evidence line 60", text);
+        using var pdf = PdfDocument.Open(bytes);
+        Assert.Equal(2, pdf.NumberOfPages);
+        Assert.Contains("Evidence line 60", pdf.GetPage(2).Text);
     }
 }

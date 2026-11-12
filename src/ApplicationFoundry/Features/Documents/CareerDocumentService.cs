@@ -48,31 +48,40 @@ public sealed class CareerDocumentService : ICareerDocumentService
 
     public byte[] ToPdf(string content)
     {
-        var lines = content.Replace("\r", "").Split('\n').Take(48).Select(EscapePdf).ToArray();
-        var body = new StringBuilder("BT /F1 10 Tf 54 738 Td 13 TL ");
-        foreach (var line in lines) body.Append('(').Append(line).Append(") Tj T* ");
-        body.Append("ET");
-        var objects = new[]
+        var lines = content.Replace("\r", "").Split('\n')
+            .SelectMany(line => line.Length == 0 ? [""] : Enumerable.Range(0, (line.Length + 89) / 90)
+                .Select(index => line.Substring(index * 90, Math.Min(90, line.Length - index * 90))))
+            .Select(EscapePdf).ToArray();
+        var pages = lines.Chunk(48).ToArray();
+        var fontId = 3 + pages.Length * 2;
+        var objects = new List<string>
         {
             "<< /Type /Catalog /Pages 2 0 R >>",
-            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
-            $"<< /Length {Encoding.ASCII.GetByteCount(body.ToString())} >>\nstream\n{body}\nendstream",
-            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+            $"<< /Type /Pages /Kids [{string.Join(' ', Enumerable.Range(0, pages.Length).Select(index => $"{3 + index * 2} 0 R"))}] /Count {pages.Length} >>"
         };
+        for (var pageIndex = 0; pageIndex < pages.Length; pageIndex++)
+        {
+            var contentId = 4 + pageIndex * 2;
+            var body = new StringBuilder("BT /F1 10 Tf 54 738 Td 13 TL ");
+            foreach (var line in pages[pageIndex]) body.Append('(').Append(line).Append(") Tj T* ");
+            body.Append("ET");
+            objects.Add($"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 {fontId} 0 R >> >> /Contents {contentId} 0 R >>");
+            objects.Add($"<< /Length {Encoding.ASCII.GetByteCount(body.ToString())} >>\nstream\n{body}\nendstream");
+        }
+        objects.Add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
         using var output = new MemoryStream();
         using var writer = new StreamWriter(output, Encoding.ASCII, 1024, true) { NewLine = "\n" };
         writer.WriteLine("%PDF-1.4"); writer.Flush();
         var offsets = new List<long> { 0 };
-        for (var index = 0; index < objects.Length; index++)
+        for (var index = 0; index < objects.Count; index++)
         {
             offsets.Add(output.Position);
             writer.WriteLine($"{index + 1} 0 obj"); writer.WriteLine(objects[index]); writer.WriteLine("endobj"); writer.Flush();
         }
         var xref = output.Position;
-        writer.WriteLine($"xref\n0 {objects.Length + 1}\n0000000000 65535 f ");
+        writer.WriteLine($"xref\n0 {objects.Count + 1}\n0000000000 65535 f ");
         foreach (var offset in offsets.Skip(1)) writer.WriteLine($"{offset:0000000000} 00000 n ");
-        writer.WriteLine($"trailer << /Size {objects.Length + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF");
+        writer.WriteLine($"trailer << /Size {objects.Count + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF");
         writer.Flush();
         return output.ToArray();
     }
