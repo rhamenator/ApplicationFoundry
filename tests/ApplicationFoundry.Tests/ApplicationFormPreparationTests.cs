@@ -48,6 +48,14 @@ public sealed class ApplicationFormPreparationTests
                             Answer = "avery@example.test",
                             Source = "Saved profile"
                         }
+                    ],
+                    Entries =
+                    [
+                        new ApplicationFormEntry
+                        {
+                            FieldLabel = "Email",
+                            ValueEntered = "avery@example.test"
+                        }
                     ]
                 };
                 await db.SaveChangesAsync();
@@ -56,12 +64,24 @@ public sealed class ApplicationFormPreparationTests
             await using (var db = await factory.CreateDbContextAsync())
             {
                 var job = await db.JobOpportunities.Include(item => item.FormPlan)
-                    .ThenInclude(plan => plan!.Answers).SingleAsync();
+                    .ThenInclude(plan => plan!.Answers)
+                    .Include(item => item.FormPlan).ThenInclude(plan => plan!.Entries).SingleAsync();
                 Assert.Equal(FormSubmissionMode.ApproveEachSubmission, job.FormPlan!.Mode);
                 Assert.Equal("Only this synthetic employer", job.FormPlan.Rules);
                 var answer = Assert.Single(job.FormPlan.Answers);
                 Assert.Equal("avery@example.test", answer.Answer);
                 Assert.Equal("Saved profile", answer.Source);
+                var entry = Assert.Single(job.FormPlan.Entries);
+                Assert.Equal("avery@example.test", entry.ValueEntered);
+                Assert.Null(entry.SubmittedAt);
+                entry.SubmittedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync();
+            }
+
+            await using (var db = await factory.CreateDbContextAsync())
+            {
+                var entry = await db.ApplicationFormEntries.SingleAsync();
+                Assert.NotNull(entry.SubmittedAt);
             }
         }
         finally

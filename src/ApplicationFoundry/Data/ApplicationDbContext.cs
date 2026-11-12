@@ -13,6 +13,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<ApplicationActivity> ApplicationActivities => Set<ApplicationActivity>();
     public DbSet<ApplicationFormPlan> ApplicationFormPlans => Set<ApplicationFormPlan>();
     public DbSet<ApplicationFormAnswer> ApplicationFormAnswers => Set<ApplicationFormAnswer>();
+    public DbSet<ApplicationFormEntry> ApplicationFormEntries => Set<ApplicationFormEntry>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -44,6 +45,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasOne<ApplicationFormPlan>()
             .WithMany(plan => plan.Answers)
             .HasForeignKey(answer => answer.ApplicationFormPlanId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<ApplicationFormEntry>()
+            .HasOne<ApplicationFormPlan>()
+            .WithMany(plan => plan.Entries)
+            .HasForeignKey(entry => entry.ApplicationFormPlanId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

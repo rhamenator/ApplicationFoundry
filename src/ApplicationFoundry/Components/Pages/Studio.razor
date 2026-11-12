@@ -231,7 +231,33 @@
                     <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="() => UseProfileFact(job.Id, ProfileFact.Phone)">Use saved phone</button>
                 </div>
                 <button class="btn btn-sm btn-outline-primary mt-2" type="button" @onclick="() => AddPreparedAnswerAsync(job.Id)">Save reviewed answer</button>
+                <h4 class="mt-3">Values entered in the employer form</h4>
+                <p>After entering a value on the employer's site, record the exact value here. This does not fill or send the form.</p>
+                @if (job.FormPlan is not null)
+                {
+                    @foreach (var entry in job.FormPlan.Entries.OrderBy(entry => entry.Id))
+                    {
+                        <p><strong>@entry.FieldLabel:</strong> @entry.ValueEntered <span class="text-secondary">· @(entry.SubmittedAt is null ? "entered, not confirmed sent" : $"confirmed sent {entry.SubmittedAt.Value.ToLocalTime():g}")</span>
+                            @if (entry.SubmittedAt is null)
+                            {
+                                <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="() => RemoveEnteredFieldAsync(job.Id, entry.Id)">Remove</button>
+                            }
+                        </p>
+                    }
+                }
+                @if (job.Status != OpportunityStatus.Submitted)
+                {
+                    <div class="profile-grid">
+                        <label>Field entered<input class="form-control" @bind="formDrafts[job.Id].EntryFieldLabel" /></label>
+                        <label>Exact value entered<textarea class="form-control" rows="2" @bind="formDrafts[job.Id].EntryValue"></textarea></label>
+                    </div>
+                    <button class="btn btn-sm btn-outline-primary mt-2" type="button" @onclick="() => RecordEnteredFieldAsync(job.Id)">Record entered value</button>
+                }
             </details>
+            @if (job.FormPlan?.Entries.Count > 0 && job.Status != OpportunityStatus.Submitted)
+            {
+                <label><input type="checkbox" @bind="formDrafts[job.Id].ConfirmSentEntries" /> I confirm the recorded field values are exactly what I sent to this employer.</label>
+            }
             <button class="btn btn-sm btn-outline-primary" @onclick="() => MarkSubmittedAsync(job.Id)">Record manual submission</button>
         </article>
     }
@@ -273,6 +299,7 @@
             ?? new CandidateProfile { UserId = userId };
         jobs = (await db.JobOpportunities.Include(job => job.Documents).Include(job => job.Activities)
             .Include(job => job.FormPlan).ThenInclude(plan => plan!.Answers)
+            .Include(job => job.FormPlan).ThenInclude(plan => plan!.Entries)
             .Where(job => job.UserId == userId).ToListAsync())
             .OrderByDescending(job => job.ImportedAt).ToList();
         formDrafts = jobs.ToDictionary(job => job.Id, job => new FormPlanDraft
@@ -508,14 +535,32 @@
     private async Task MarkSubmittedAsync(int jobId)
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        var job = await db.JobOpportunities.Include(item => item.Documents).SingleAsync(item => item.Id == jobId && item.UserId == userId);
+        var job = await db.JobOpportunities.Include(item => item.Documents)
+            .Include(item => item.FormPlan).ThenInclude(plan => plan!.Entries)
+            .SingleAsync(item => item.Id == jobId && item.UserId == userId);
+        if (job.Status == OpportunityStatus.Submitted)
+        {
+            message = "This opportunity is already recorded as submitted.";
+            return;
+        }
         if (job.Documents.Count < 2 || job.Documents.Any(document => document.ApprovedAt is null))
         {
             message = "Approve both document versions before recording a manual submission.";
             return;
         }
+        if (job.FormPlan?.Entries.Count > 0 && !formDrafts[jobId].ConfirmSentEntries)
+        {
+            message = "Confirm that the recorded form values are exactly what you sent before recording submission.";
+            return;
+        }
+        var submittedAt = DateTimeOffset.UtcNow;
+        if (job.FormPlan is not null)
+        {
+            foreach (var entry in job.FormPlan.Entries.Where(entry => entry.SubmittedAt is null))
+                entry.SubmittedAt = submittedAt;
+        }
         job.Status = OpportunityStatus.Submitted;
-        job.Activities.Add(new ApplicationActivity { Action = "submitted", Note = "User confirmed a manual external submission." });
+        job.Activities.Add(new ApplicationActivity { Action = "submitted", Note = "User confirmed a manual external submission and any recorded form values." });
         await db.SaveChangesAsync();
         message = "Manual submission recorded. No external form was automated.";
         await ReloadAsync();
@@ -609,6 +654,45 @@
         await ReloadAsync();
     }
 
+    private async Task RecordEnteredFieldAsync(int jobId)
+    {
+        var draft = formDrafts[jobId];
+        var field = draft.EntryFieldLabel.Trim();
+        var value = draft.EntryValue.Trim();
+        if (field.Length is < 1 or > 200 || value.Length is < 1 or > 4000)
+        {
+            message = "Enter a field (up to 200 characters) and its exact value (up to 4000).";
+            return;
+        }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.Include(item => item.FormPlan)
+            .SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        if (job is null || job.Status == OpportunityStatus.Submitted) return;
+        job.FormPlan ??= new ApplicationFormPlan();
+        job.FormPlan.Entries.Add(new ApplicationFormEntry
+        {
+            FieldLabel = field,
+            ValueEntered = value,
+            EnteredAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        message = "Entered value recorded locally. It is not marked as sent.";
+        await ReloadAsync();
+    }
+
+    private async Task RemoveEnteredFieldAsync(int jobId, int entryId)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.Include(item => item.FormPlan).ThenInclude(plan => plan!.Entries)
+            .SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        var entry = job?.FormPlan?.Entries.SingleOrDefault(item => item.Id == entryId);
+        if (entry is null || entry.SubmittedAt is not null || job!.Status == OpportunityStatus.Submitted) return;
+        db.ApplicationFormEntries.Remove(entry);
+        await db.SaveChangesAsync();
+        message = "Unsent entered value removed.";
+        await ReloadAsync();
+    }
+
     private sealed class FormPlanDraft
     {
         public FormSubmissionMode Mode { get; set; }
@@ -616,5 +700,8 @@
         public string FieldLabel { get; set; } = "";
         public string Answer { get; set; } = "";
         public string Source { get; set; } = "";
+        public string EntryFieldLabel { get; set; } = "";
+        public string EntryValue { get; set; } = "";
+        public bool ConfirmSentEntries { get; set; }
     }
 }

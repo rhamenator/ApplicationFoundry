@@ -84,6 +84,7 @@ public sealed class ApplicationFormPlan
     [MaxLength(2000)] public string Rules { get; set; } = "";
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     public List<ApplicationFormAnswer> Answers { get; set; } = [];
+    public List<ApplicationFormEntry> Entries { get; set; } = [];
 }
 
 public sealed class ApplicationFormAnswer
@@ -94,6 +95,16 @@ public sealed class ApplicationFormAnswer
     [Required, MaxLength(4000)] public string Answer { get; set; } = "";
     [Required, MaxLength(240)] public string Source { get; set; } = "";
     public DateTimeOffset ReviewedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+public sealed class ApplicationFormEntry
+{
+    public int Id { get; set; }
+    public int ApplicationFormPlanId { get; set; }
+    [Required, MaxLength(200)] public string FieldLabel { get; set; } = "";
+    [Required, MaxLength(4000)] public string ValueEntered { get; set; } = "";
+    public DateTimeOffset EnteredAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? SubmittedAt { get; set; }
 }
 
 public enum CareerDocumentKind { Resume, CoverLetter }

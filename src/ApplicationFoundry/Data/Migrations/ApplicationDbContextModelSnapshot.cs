@@ -80,6 +80,38 @@ namespace ApplicationFoundry.Migrations
                     b.ToTable("ApplicationFormAnswers");
                 });
 
+            modelBuilder.Entity("ApplicationFoundry.Data.ApplicationFormEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ApplicationFormPlanId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset>("EnteredAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FieldLabel")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("SubmittedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ValueEntered")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApplicationFormPlanId");
+
+                    b.ToTable("ApplicationFormEntries");
+                });
+
             modelBuilder.Entity("ApplicationFoundry.Data.ApplicationFormPlan", b =>
                 {
                     b.Property<int>("Id")
@@ -579,6 +611,15 @@ namespace ApplicationFoundry.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ApplicationFoundry.Data.ApplicationFormEntry", b =>
+                {
+                    b.HasOne("ApplicationFoundry.Data.ApplicationFormPlan", null)
+                        .WithMany("Entries")
+                        .HasForeignKey("ApplicationFormPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ApplicationFoundry.Data.ApplicationFormPlan", b =>
                 {
                     b.HasOne("ApplicationFoundry.Data.JobOpportunity", null)
@@ -711,6 +752,8 @@ namespace ApplicationFoundry.Migrations
             modelBuilder.Entity("ApplicationFoundry.Data.ApplicationFormPlan", b =>
                 {
                     b.Navigation("Answers");
+
+                    b.Navigation("Entries");
                 });
 
             modelBuilder.Entity("ApplicationFoundry.Data.CandidateProfile", b =>
