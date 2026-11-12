@@ -75,6 +75,7 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 builder.Services.AddSingleton<IFitScorer, OnnxFitScorer>();
 builder.Services.AddHttpClient<IJobDiscoveryService, RemoteJobDiscoveryService>();
+builder.Services.AddHttpClient<GreenhouseJobDiscoveryService>();
 builder.Services.AddSingleton<ICareerDocumentService, CareerDocumentService>();
 builder.Services.AddSingleton<ICandidateDocumentImportService, CandidateDocumentImportService>();
 builder.Services.AddSingleton<IClientDocumentExport, BrowserDocumentExport>();

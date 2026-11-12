@@ -57,6 +57,7 @@ internal static class Program
         }).AddEntityFrameworkStores<ApplicationDbContext>();
         services.AddSingleton<IFitScorer, ManagedFitScorer>();
         services.AddHttpClient<IJobDiscoveryService, RemoteJobDiscoveryService>();
+        services.AddHttpClient<GreenhouseJobDiscoveryService>();
         services.AddSingleton<ICareerDocumentService, CareerDocumentService>();
         services.AddSingleton<ICandidateDocumentImportService, CandidateDocumentImportService>();
         var desktopExport = new DesktopDocumentExport();

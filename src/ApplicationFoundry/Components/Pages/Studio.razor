@@ -7,6 +7,7 @@
 @inject ICandidateDocumentImportService DocumentImporter
 @inject IClientDocumentExport ClientExport
 @inject IJobDiscoveryService JobDiscovery
+@inject GreenhouseJobDiscoveryService GreenhouseDiscovery
 
 <PageTitle>Career studio</PageTitle>
 
@@ -131,8 +132,23 @@
 </section>
 
 <section class="studio-panel">
-    <h2>Find matching remote jobs</h2>
-    <p>Fetch current Remote OK postings and compare them with your saved evidence on this computer. Your profile is not sent to the job board.</p>
+    <h2>Find matching jobs</h2>
+    <p>Compare current postings with your saved evidence on this computer. Your profile is not sent to the job board.</p>
+    <label>Job source
+        <select class="form-select" @bind="searchSource">
+            <option value="remoteok">Remote OK (remote roles)</option>
+            <option value="greenhouse">Greenhouse employer board</option>
+        </select>
+    </label>
+    @if (searchSource == "greenhouse")
+    {
+        <div class="profile-grid">
+            <label>Employer name<input class="form-control" @bind="greenhouseEmployer" /></label>
+            <label>Greenhouse board token<input class="form-control" @bind="greenhouseBoardToken" /></label>
+            <label>Location contains (optional)<input class="form-control" @bind="searchLocation" /></label>
+        </div>
+        <p class="text-secondary">Use the final segment of the employer's Greenhouse board URL as its token. The employer name and token identify the board; your profile and filters stay local.</p>
+    }
     <div class="profile-grid">
         <label>Required keywords (comma separated)<input class="form-control" @bind="searchKeywords" /></label>
         <label>Minimum local fit
@@ -145,7 +161,7 @@
         </label>
     </div>
     <p class="text-secondary">All keywords must appear in the posting. Filters are applied on this computer.</p>
-    <button class="btn btn-primary" type="button" disabled="@(isSearching || profile.Id == 0 || profile.Evidence.Count == 0)" @onclick="SearchRemoteJobsAsync">
+    <button class="btn btn-primary" type="button" disabled="@(isSearching || profile.Id == 0 || profile.Evidence.Count == 0 || (searchSource == "greenhouse" && (string.IsNullOrWhiteSpace(greenhouseEmployer) || string.IsNullOrWhiteSpace(greenhouseBoardToken))))" @onclick="SearchJobsAsync">
         @(isSearching ? "Searching…" : "Find matching jobs")
     </button>
     @if (profile.Id == 0 || profile.Evidence.Count == 0)
@@ -155,10 +171,10 @@
     @foreach (var result in discoveredJobs)
     {
         <article class="job-card mt-3">
-            <div><h3>@result.RoleTitle</h3><p>@result.Organization</p></div>
+            <div><h3>@result.RoleTitle</h3><p>@result.Organization @if (!string.IsNullOrWhiteSpace(result.Location)) { <span>· @result.Location</span> }</p></div>
             <div class="fit-score"><strong>@result.FitScore.ToString("P0")</strong><span>local fit signal</span></div>
             <p class="fit-explanation">@result.FitExplanation</p>
-            <p><a href="@result.SourceUrl" target="_blank" rel="noopener noreferrer">View original posting on Remote OK</a></p>
+            <p><a href="@result.SourceUrl" target="_blank" rel="noopener noreferrer">View original posting on @result.SourceName</a></p>
             <button class="btn btn-sm btn-primary" type="button" @onclick="() => DraftDiscoveredJobAsync(result)">Create drafts for this job</button>
         </article>
     }
@@ -293,8 +309,12 @@
     private string sourceKind = "resume";
     private IReadOnlyList<DiscoveredJob> discoveredJobs = [];
     private bool isSearching;
+    private string searchSource = "remoteok";
     private string searchKeywords = "";
     private int minimumSearchFitPercent;
+    private string greenhouseEmployer = "";
+    private string greenhouseBoardToken = "";
+    private string searchLocation = "";
     private string userId = "";
     private string message = "";
 
@@ -474,14 +494,25 @@
         await ReloadAsync();
     }
 
-    private async Task SearchRemoteJobsAsync()
+    private async Task SearchJobsAsync()
     {
         isSearching = true;
         message = "";
         try
         {
-            discoveredJobs = await JobDiscovery.FindMatchesAsync(profile, new JobSearchFilters(searchKeywords, minimumSearchFitPercent / 100f));
-            if (discoveredJobs.Count == 0) message = "No Remote OK postings matched these filters right now. Try broader filters or import a posting below.";
+            var filters = new JobSearchFilters(searchKeywords, minimumSearchFitPercent / 100f);
+            discoveredJobs = searchSource == "greenhouse"
+                ? await GreenhouseDiscovery.FindMatchesAsync(profile, greenhouseBoardToken, greenhouseEmployer, filters, searchLocation)
+                : await JobDiscovery.FindMatchesAsync(profile, filters);
+            if (discoveredJobs.Count == 0) message = "No postings matched these filters right now. Try broader filters or import a posting below.";
+        }
+        catch (ArgumentException exception)
+        {
+            message = exception.Message;
+        }
+        catch (HttpRequestException exception) when (searchSource == "greenhouse" && exception.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            message = "That Greenhouse board was not found. Check the token from the employer's board URL.";
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
         {

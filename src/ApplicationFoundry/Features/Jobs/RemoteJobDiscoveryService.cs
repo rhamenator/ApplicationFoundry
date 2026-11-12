@@ -12,7 +12,9 @@ public sealed record DiscoveredJob(
     string SourceUrl,
     string Description,
     float FitScore,
-    string FitExplanation);
+    string FitExplanation,
+    string SourceName = "Remote OK",
+    string Location = "Remote");
 
 public sealed record JobSearchFilters(string Keywords = "", float MinimumFitScore = 0);
 
