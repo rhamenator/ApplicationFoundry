@@ -49,8 +49,20 @@ finishes.
 Pull request builds also produce a separate **Application Foundry Desktop
 Prototype** installer. Its Start menu shortcut opens a desktop window without
 the server console. Approved desktop drafts can be saved with a Windows file
-dialog as DOCX or PDF. The desktop prototype is experimental and does not yet
-support external application forms.
+dialog as DOCX or PDF. The desktop prototype can help with an employer form:
+the applicant captures its field structure in a browser, reviews prepared
+answers in the app, explicitly authorizes a fill attempt, and inspects the
+entered values before recording them. The browser helper never submits the
+form. This workflow has passed against a synthetic local HTTPS form on Windows;
+compatibility with employer sites remains unverified.
+
+The desktop installer uses the current user's account and can be removed from
+Windows Settings or its Start menu entry. Uninstall removes the app and its
+shortcut but preserves the local applicant database at
+`%LOCALAPPDATA%\ApplicationFoundry\app.db`. Delete that file yourself only if
+you also want to erase the saved profile, jobs, documents, and application
+history. On a fresh Windows installation, the first launch may take longer
+than later launches while Windows finishes setting up the user profile.
 
 The fit scorer runs a small ONNX logistic model entirely in the application
 process. Its four visible inputs measure keyword evidence, overall profile
