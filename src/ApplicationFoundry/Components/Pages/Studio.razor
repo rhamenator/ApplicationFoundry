@@ -133,6 +133,18 @@
 <section class="studio-panel">
     <h2>Find matching remote jobs</h2>
     <p>Fetch current Remote OK postings and compare them with your saved evidence on this computer. Your profile is not sent to the job board.</p>
+    <div class="profile-grid">
+        <label>Required keywords (comma separated)<input class="form-control" @bind="searchKeywords" /></label>
+        <label>Minimum local fit
+            <select class="form-select" @bind="minimumSearchFitPercent">
+                <option value="0">Any fit</option>
+                <option value="25">25%</option>
+                <option value="50">50%</option>
+                <option value="75">75%</option>
+            </select>
+        </label>
+    </div>
+    <p class="text-secondary">All keywords must appear in the posting. Filters are applied on this computer.</p>
     <button class="btn btn-primary" type="button" disabled="@(isSearching || profile.Id == 0 || profile.Evidence.Count == 0)" @onclick="SearchRemoteJobsAsync">
         @(isSearching ? "Searching…" : "Find matching jobs")
     </button>
@@ -281,6 +293,8 @@
     private string sourceKind = "resume";
     private IReadOnlyList<DiscoveredJob> discoveredJobs = [];
     private bool isSearching;
+    private string searchKeywords = "";
+    private int minimumSearchFitPercent;
     private string userId = "";
     private string message = "";
 
@@ -466,8 +480,8 @@
         message = "";
         try
         {
-            discoveredJobs = await JobDiscovery.FindMatchesAsync(profile);
-            if (discoveredJobs.Count == 0) message = "No matching remote jobs were available from Remote OK right now.";
+            discoveredJobs = await JobDiscovery.FindMatchesAsync(profile, new JobSearchFilters(searchKeywords, minimumSearchFitPercent / 100f));
+            if (discoveredJobs.Count == 0) message = "No Remote OK postings matched these filters right now. Try broader filters or import a posting below.";
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
         {

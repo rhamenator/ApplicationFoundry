@@ -24,6 +24,33 @@ public class JobDiscoveryTests
         Assert.False(handler.RequestHadBody);
     }
 
+    [Fact]
+    public async Task SearchFiltersLocallyAndRemovesTrackingUrlDuplicates()
+    {
+        var handler = new FeedHandler();
+        var service = new RemoteJobDiscoveryService(new HttpClient(handler), new TitleScorer());
+        var profile = new CandidateProfile { FirstName = "Private", Summary = "C# developer" };
+
+        var results = await service.FindMatchesAsync(profile, new JobSearchFilters("C#, software", .5f));
+
+        var result = Assert.Single(results);
+        Assert.Equal("C# Developer", result.RoleTitle);
+        Assert.Equal("https://remoteok.com/remote-jobs/2", result.SourceUrl);
+        Assert.Equal("https://remoteok.com/api", handler.RequestUri);
+        Assert.False(handler.RequestHadBody);
+    }
+
+    [Fact]
+    public async Task MinimumFitExcludesLowerRankedPostings()
+    {
+        var service = new RemoteJobDiscoveryService(new HttpClient(new FeedHandler()), new TitleScorer());
+
+        var results = await service.FindMatchesAsync(new CandidateProfile(), new JobSearchFilters(MinimumFitScore: .5f));
+
+        Assert.Single(results);
+        Assert.Equal("C# Developer", results[0].RoleTitle);
+    }
+
     private sealed class FeedHandler : HttpMessageHandler
     {
         public string? RequestUri { get; private set; }
@@ -38,6 +65,7 @@ public class JobDiscoveryTests
                   {"legal":"feed metadata"},
                   {"position":"Office Assistant","company":"Example","url":"https://remoteok.com/remote-jobs/1","description":"<p>Manage records</p>"},
                   {"position":"C# Developer","company":"Example","url":"https://remoteok.com/remote-jobs/2","description":"<p>Build software</p>"},
+                  {"position":"C# Developer","company":"Example","url":"https://www.remoteok.com/remote-jobs/2?ref=feed","description":"<p>Build software</p>"},
                   {"position":"Unsafe","company":"Example","url":"https://elsewhere.example/job","description":"<p>Ignore</p>"}
                 ]
                 """;
