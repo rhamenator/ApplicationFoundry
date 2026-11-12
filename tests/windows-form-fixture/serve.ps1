@@ -9,9 +9,20 @@ $request = [System.Security.Cryptography.X509Certificates.CertificateRequest]::n
 $names = [System.Security.Cryptography.X509Certificates.SubjectAlternativeNameBuilder]::new()
 $names.AddDnsName('localhost')
 $request.CertificateExtensions.Add($names.Build())
-$certificate = $request.CreateSelfSigned(
+$ephemeralCertificate = $request.CreateSelfSigned(
     [DateTimeOffset]::UtcNow.AddMinutes(-5),
     [DateTimeOffset]::UtcNow.AddHours(4))
+# Windows PowerShell 5.1 uses SChannel for SslStream. It needs an imported,
+# persisted private key; the key attached by CreateSelfSigned is ephemeral.
+$pfxPassword = [Guid]::NewGuid().ToString('N')
+$pfx = $ephemeralCertificate.Export(
+    [System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx,
+    $pfxPassword)
+$keyFlags = [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::UserKeySet -bor
+    [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::PersistKeySet
+$certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+    $pfx, $pfxPassword, $keyFlags)
+$ephemeralCertificate.Dispose()
 $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
 $listener.Start()
 Write-Host "Synthetic Application Foundry HTTPS fixture listening at https://localhost:$Port"
@@ -48,6 +59,9 @@ try {
         }
         catch [System.Security.Authentication.AuthenticationException] {
             # The test browser may reject the temporary self-signed certificate.
+        }
+        catch [System.IO.IOException] {
+            # SChannel reports a browser-aborted TLS handshake as an IO error.
         }
         finally {
             if ($null -ne $reader) { $reader.Dispose(); $reader = $null }
