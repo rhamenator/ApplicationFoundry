@@ -84,6 +84,8 @@ public sealed class ApplicationFormPlan
     public FormSubmissionMode Mode { get; set; } = FormSubmissionMode.SubmitPersonally;
     [MaxLength(2000)] public string Rules { get; set; } = "";
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? SubmissionApprovedAt { get; set; }
+    [MaxLength(64)] public string SubmissionApprovalFingerprint { get; set; } = "";
     public List<ApplicationFormAnswer> Answers { get; set; } = [];
     public List<ApplicationFormEntry> Entries { get; set; } = [];
 }

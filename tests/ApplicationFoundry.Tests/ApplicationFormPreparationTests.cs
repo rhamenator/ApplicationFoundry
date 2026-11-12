@@ -74,6 +74,8 @@ public sealed class ApplicationFormPreparationTests
                 var entry = Assert.Single(job.FormPlan.Entries);
                 Assert.Equal("avery@example.test", entry.ValueEntered);
                 Assert.Null(entry.SubmittedAt);
+                job.FormPlan.SubmissionApprovedAt = DateTimeOffset.UtcNow;
+                job.FormPlan.SubmissionApprovalFingerprint = SubmissionApproval.Fingerprint(job);
                 entry.SubmittedAt = DateTimeOffset.UtcNow;
                 await db.SaveChangesAsync();
             }
@@ -82,11 +84,44 @@ public sealed class ApplicationFormPreparationTests
             {
                 var entry = await db.ApplicationFormEntries.SingleAsync();
                 Assert.NotNull(entry.SubmittedAt);
+                var job = await db.JobOpportunities.Include(item => item.FormPlan)
+                    .ThenInclude(plan => plan!.Entries).Include(item => item.Documents).SingleAsync();
+                Assert.True(SubmissionApproval.IsCurrent(job));
+                job.FormPlan!.Entries.Add(new ApplicationFormEntry
+                {
+                    FieldLabel = "Availability",
+                    ValueEntered = "Two weeks"
+                });
+                Assert.False(SubmissionApproval.IsCurrent(job));
             }
         }
         finally
         {
             File.Delete(path);
         }
+    }
+
+    [Fact]
+    public void Approval_changes_when_an_approved_document_or_rules_change()
+    {
+        var job = new JobOpportunity
+        {
+            RoleTitle = "Synthetic analyst",
+            Organization = "Example employer",
+            FormPlan = new ApplicationFormPlan { Mode = FormSubmissionMode.ApproveEachSubmission, Rules = "One employer" },
+            Documents =
+            [
+                new DocumentVersion { Id = 1, Kind = CareerDocumentKind.Resume, Version = 1, Content = "Synthetic resume", ApprovedAt = DateTimeOffset.UtcNow },
+                new DocumentVersion { Id = 2, Kind = CareerDocumentKind.CoverLetter, Version = 1, Content = "Synthetic letter", ApprovedAt = DateTimeOffset.UtcNow }
+            ]
+        };
+        job.FormPlan.SubmissionApprovedAt = DateTimeOffset.UtcNow;
+        job.FormPlan.SubmissionApprovalFingerprint = SubmissionApproval.Fingerprint(job);
+        Assert.True(SubmissionApproval.IsCurrent(job));
+        job.Documents[0].Content = "Revised synthetic resume";
+        Assert.False(SubmissionApproval.IsCurrent(job));
+        job.Documents[0].Content = "Synthetic resume";
+        job.FormPlan.Rules = "Different employer rule";
+        Assert.False(SubmissionApproval.IsCurrent(job));
     }
 }

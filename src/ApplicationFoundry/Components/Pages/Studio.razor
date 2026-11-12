@@ -281,6 +281,16 @@
                     </div>
                     <button class="btn btn-sm btn-outline-primary mt-2" type="button" @onclick="() => RecordEnteredFieldAsync(job.Id)">Record entered value</button>
                 }
+                @if (job.FormPlan?.Mode == FormSubmissionMode.ApproveEachSubmission)
+                {
+                    <h4 class="mt-3">Submission approval</h4>
+                    <p>Review the employer, approved document versions, and exact form values above. Approval applies only to this snapshot; changing any of them requires another approval. This app still does not send the employer form.</p>
+                    <p>@(SubmissionApproval.IsCurrent(job) ? $"Approved {job.FormPlan.SubmissionApprovedAt!.Value.ToLocalTime():g}" : "Approval required for the current submission packet")</p>
+                    @if (job.Status != OpportunityStatus.Submitted)
+                    {
+                        <button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => ApproveSubmissionAsync(job.Id)">Approve this submission packet</button>
+                    }
+                }
             </details>
             @if (job.FormPlan?.Entries.Count > 0 && job.Status != OpportunityStatus.Submitted)
             {
@@ -614,6 +624,11 @@
             message = "Approve both document versions before recording a manual submission.";
             return;
         }
+        if (job.FormPlan?.Mode == FormSubmissionMode.ApproveEachSubmission && !SubmissionApproval.IsCurrent(job))
+        {
+            message = "Approve the current submission packet before recording submission.";
+            return;
+        }
         if (job.FormPlan?.Entries.Count > 0 && !formDrafts[jobId].ConfirmSentEntries)
         {
             message = "Confirm that the recorded form values are exactly what you sent before recording submission.";
@@ -629,6 +644,27 @@
         job.Activities.Add(new ApplicationActivity { Action = "submitted", Note = "User confirmed a manual external submission and any recorded form values." });
         await db.SaveChangesAsync();
         message = "Manual submission recorded. No external form was automated.";
+        await ReloadAsync();
+    }
+
+    private async Task ApproveSubmissionAsync(int jobId)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.Include(item => item.Documents)
+            .Include(item => item.FormPlan).ThenInclude(plan => plan!.Entries)
+            .SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        if (job?.FormPlan?.Mode != FormSubmissionMode.ApproveEachSubmission || job.Status == OpportunityStatus.Submitted)
+            return;
+        if (job.Documents.Count < 2 || job.Documents.Any(document => document.ApprovedAt is null))
+        {
+            message = "Approve both document versions before approving this submission packet.";
+            return;
+        }
+        job.FormPlan.SubmissionApprovalFingerprint = SubmissionApproval.Fingerprint(job);
+        job.FormPlan.SubmissionApprovedAt = DateTimeOffset.UtcNow;
+        job.Activities.Add(new ApplicationActivity { Action = "submission-approved", Note = "Applicant approved the current document versions and recorded form values for this opportunity." });
+        await db.SaveChangesAsync();
+        message = "Current submission packet approved locally. No employer form was sent.";
         await ReloadAsync();
     }
 
