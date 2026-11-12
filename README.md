@@ -13,6 +13,11 @@ branch adds a Remote OK feed whose listings are ranked locally; broader job
 discovery, application form assistance, and the full follow-up workflow remain
 in development.
 
+Application form assistance is part of the intended workflow, reflecting the
+original Access databases. The app should reuse verified profile details and
+saved answers to prepare employer-specific form entries for the applicant to
+review. The current prototype does not fill external forms.
+
 Name data uses these explicit fields: title, first name, middle initial(s), last
 name, suffix, and preferred display name.
 
