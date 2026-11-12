@@ -26,6 +26,7 @@ with tempfile.TemporaryDirectory(dir=repo) as directory:
         '<label for="availability">Availability</label><select id="availability" required>'
         '<option value="">Choose</option><option value="soon">Two weeks</option></select>'
         '<input id="hidden" type="hidden" value="SECRET-HIDDEN">'
+        '<input type="submit" value="Send">'
         '</form><output id="capture"></output><script>'
         "Object.defineProperty(navigator,'clipboard',{value:{writeText:text=>{"
         "document.querySelector('#capture').textContent=text;return Promise.resolve();}}});"

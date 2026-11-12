@@ -7,7 +7,7 @@ public static class EmployerFormSnapshotBookmarklet
     public const string Script = """
         (() => {
           const fields = Array.from(document.querySelectorAll('input,textarea,select'))
-            .filter(el => !el.disabled && el.type !== 'hidden')
+            .filter(el => !el.disabled && !['hidden', 'submit', 'button', 'reset', 'image'].includes(el.type))
             .map(el => {
               const type = el.tagName.toLowerCase() === 'input'
                 ? (el.type || 'text').toLowerCase()

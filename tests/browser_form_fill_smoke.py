@@ -1,0 +1,78 @@
+"""Exercise the browser fill script on synthetic forms without submitting them."""
+
+import html
+import json
+import re
+import shutil
+import subprocess
+import tempfile
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+
+repo = Path(__file__).resolve().parents[1]
+chromium = shutil.which("chromium")
+if chromium is None:
+    raise SystemExit("Chromium is required for this focused browser smoke test.")
+source = (repo / "src/ApplicationFoundry/Features/Forms/EmployerFormFillBookmarklet.cs").read_text()
+match = re.search(r'public const string Script = """\n(.*?)\n\s*""";', source, re.S)
+assert match is not None
+
+
+def run_fixture(directory: Path, changed: bool) -> dict:
+    fixture = (directory / ("changed.html" if changed else "matching.html")).resolve()
+    label = "Email changed" if changed else "Email"
+    packet = {
+        "url": fixture.as_uri(),
+        "fields": [
+            {"key": "email", "label": "Email", "type": "email", "required": True},
+            {"key": "availability", "label": "Availability", "type": "select",
+             "required": True, "options": ["Two weeks"]},
+        ],
+        "values": [
+            {"key": "email", "label": "Email", "value": "avery@example.test"},
+            {"key": "availability", "label": "Availability", "value": "Two weeks"},
+        ],
+        "expiresAt": (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(),
+    }
+    raw = json.dumps(packet)
+    fixture.write_text(
+        '<!doctype html><meta charset="utf-8"><form id="application">'
+        f'<label for="email">{label}</label><input id="email" type="email" required>'
+        '<label for="availability">Availability</label><select id="availability" required>'
+        '<option value="">Choose</option><option value="soon">Two weeks</option></select>'
+        '<button type="submit">Submit</button></form><output id="capture"></output><script>'
+        'window.submissions=0;document.querySelector("form").addEventListener("submit",'
+        'event=>{event.preventDefault();window.submissions++});'
+        'Object.defineProperty(navigator,"clipboard",{value:{readText:()=>Promise.resolve('
+        + json.dumps(raw) + ')}});'
+        'window.alert=message=>{document.querySelector("#capture").textContent=JSON.stringify('
+        '{message,email:document.querySelector("#email").value,'
+        'availability:document.querySelector("#availability").value,submissions:window.submissions})};'
+        + match.group(1) + '</script>'
+    )
+    result = subprocess.run(
+        [chromium, "--headless=new", "--no-sandbox", "--disable-gpu",
+         "--disable-background-networking", "--no-first-run",
+         "--user-data-dir=" + str(directory / ("profile-changed" if changed else "profile-matching")),
+         "--dump-dom", fixture.as_uri()],
+        capture_output=True, text=True, timeout=25, check=True,
+    )
+    captured = re.search(r'<output id="capture">([^<]+)</output>', result.stdout)
+    assert captured is not None, "Fill script did not report a result"
+    return json.loads(html.unescape(captured.group(1)))
+
+
+with tempfile.TemporaryDirectory(dir=repo) as directory:
+    folder = Path(directory)
+    matching = run_fixture(folder, False)
+    assert matching["email"] == "avery@example.test", matching
+    assert matching["availability"] == "soon", matching
+    assert matching["submissions"] == 0, matching
+    changed = run_fixture(folder, True)
+    assert changed["email"] == "", changed
+    assert changed["availability"] == "", changed
+    assert changed["submissions"] == 0, changed
+    assert "changed" in changed["message"].lower(), changed
+
+print("Synthetic Chromium fill passed: exact form filled, changed form blocked, no submission.")
