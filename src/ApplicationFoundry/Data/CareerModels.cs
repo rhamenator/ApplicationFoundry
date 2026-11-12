@@ -12,8 +12,8 @@ public sealed class CandidateProfile
     [Required, MaxLength(80)] public string LastName { get; set; } = "";
     [MaxLength(32)] public string Suffix { get; set; } = "";
     [MaxLength(160)] public string PreferredDisplayName { get; set; } = "";
-    [EmailAddress, MaxLength(256)] public string Email { get; set; } = "";
-    [Phone, MaxLength(64)] public string Phone { get; set; } = "";
+    [OptionalEmailAddress, MaxLength(256)] public string Email { get; set; } = "";
+    [OptionalPhone, MaxLength(64)] public string Phone { get; set; } = "";
     [MaxLength(4000)] public string Summary { get; set; } = "";
     public List<EvidenceItem> Evidence { get; set; } = [];
 

@@ -186,6 +186,7 @@
     {
         var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+        newJob.UserId = userId;
         await ReloadAsync();
     }
 
@@ -283,7 +284,7 @@
         await using var db = await DbFactory.CreateDbContextAsync();
         db.JobOpportunities.Add(newJob);
         await db.SaveChangesAsync();
-        newJob = new JobOpportunity();
+        newJob = new JobOpportunity { UserId = userId };
         message = "Opportunity analyzed; review both drafts before approval.";
         await ReloadAsync();
     }

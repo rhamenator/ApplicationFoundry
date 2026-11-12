@@ -2,6 +2,7 @@ using ApplicationFoundry.Data;
 using ApplicationFoundry.Features.Documents;
 using ApplicationFoundry.Features.Fit;
 using System.IO.Compression;
+using System.ComponentModel.DataAnnotations;
 using UglyToad.PdfPig;
 
 namespace ApplicationFoundry.Tests;
@@ -33,6 +34,16 @@ public sealed class CareerWorkflowTests
         Assert.Equal("Avery Rivera", profile.DisplayName);
         profile.PreferredDisplayName = "";
         Assert.Equal("Dr. Avery J. Rivera PhD", profile.DisplayName);
+    }
+
+    [Fact]
+    public void Profile_allows_blank_optional_contact_fields()
+    {
+        var profile = new CandidateProfile { UserId = "synthetic", FirstName = "Jordan", LastName = "Example" };
+        var results = new List<ValidationResult>();
+
+        Assert.True(Validator.TryValidateObject(profile, new ValidationContext(profile), results, true));
+        Assert.Empty(results);
     }
 
     [Fact]
