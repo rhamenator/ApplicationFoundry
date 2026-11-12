@@ -33,6 +33,19 @@ public sealed class EvidenceItem
     [MaxLength(1000)] public string Keywords { get; set; } = "";
 }
 
+public sealed class CandidateSourceDocument
+{
+    public int Id { get; set; }
+    [Required, MaxLength(450)] public string UserId { get; set; } = "";
+    [Required, MaxLength(200)] public string FileName { get; set; } = "";
+    [Required, MaxLength(80)] public string Kind { get; set; } = "resume";
+    [Required, MaxLength(120)] public string MediaType { get; set; } = "";
+    [Required, MaxLength(64)] public string SourceSha256 { get; set; } = "";
+    [Required, MaxLength(200000)] public string ExtractedText { get; set; } = "";
+    [MaxLength(1000)] public string ReviewNotes { get; set; } = "";
+    public DateTimeOffset ImportedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
 public enum OpportunityStatus
 {
     Interested,

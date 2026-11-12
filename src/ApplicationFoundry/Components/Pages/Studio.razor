@@ -4,6 +4,8 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IFitScorer FitScorer
 @inject ICareerDocumentService Documents
+@inject ICandidateDocumentImportService DocumentImporter
+@inject IClientDocumentExport ClientExport
 @inject IJobDiscoveryService JobDiscovery
 
 <PageTitle>Career studio</PageTitle>
@@ -54,6 +56,42 @@
             <li><strong>@item.Claim</strong><span>@item.Kind · @item.Keywords</span></li>
         }
     </ul>
+</section>
+
+<section class="studio-panel">
+    <h2>Import your documents</h2>
+    <p>Bring in a TXT, DOCX, or text-based PDF résumé, cover letter, or other source document (up to 2 MB). Review the extracted text before saving it. The original file stays on your computer.</p>
+    <label>Document type
+        <select class="form-select" @bind="sourceKind">
+            <option value="resume">Résumé</option>
+            <option value="cover-letter">Cover letter</option>
+            <option value="other">Other</option>
+        </select>
+    </label>
+    <InputFile OnChange="PreviewSourceDocumentAsync" accept=".txt,.docx,.pdf" />
+    @if (pendingSource is not null)
+    {
+        <div class="mt-3">
+            <h3>Review @pendingSource.FileName</h3>
+            @if (!string.IsNullOrEmpty(pendingSource.ReviewNotes))
+            {
+                <p class="text-warning">Extraction notes: @pendingSource.ReviewNotes. Check the text against the original.</p>
+            }
+            <pre class="document-preview">@pendingSource.ExtractedText</pre>
+            <button class="btn btn-primary" type="button" @onclick="SaveSourceDocumentAsync">Save imported text</button>
+        </div>
+    }
+    @foreach (var source in sourceDocuments)
+    {
+        <details class="mt-3">
+            <summary>@source.FileName · @source.Kind · imported @source.ImportedAt.ToLocalTime().ToString("g")</summary>
+            @if (!string.IsNullOrEmpty(source.ReviewNotes))
+            {
+                <p class="text-warning">Extraction notes: @source.ReviewNotes</p>
+            }
+            <pre class="document-preview">@source.ExtractedText</pre>
+        </details>
+    }
 </section>
 
 <section class="studio-panel">
@@ -113,7 +151,16 @@
                     }
                     else
                     {
-                        <a href="@($"/documents/{document.Id}/docx")">DOCX</a><span> · </span><a href="@($"/documents/{document.Id}/pdf")">PDF</a>
+                        @if (ClientExport.IsAvailable)
+                        {
+                            <button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => ExportDocxAsync(document.Id)">Save DOCX</button>
+                            <span> · </span>
+                            <button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => ExportPdfAsync(document.Id)">Save PDF</button>
+                        }
+                        else
+                        {
+                            <a href="@($"/documents/{document.Id}/docx")">DOCX</a><span> · </span><a href="@($"/documents/{document.Id}/pdf")">PDF</a>
+                        }
                     }
                 </details>
             }
@@ -127,6 +174,9 @@
     private EvidenceItem newEvidence = new();
     private JobOpportunity newJob = new();
     private List<JobOpportunity> jobs = [];
+    private List<CandidateSourceDocument> sourceDocuments = [];
+    private CandidateDocumentImport? pendingSource;
+    private string sourceKind = "resume";
     private IReadOnlyList<DiscoveredJob> discoveredJobs = [];
     private bool isSearching;
     private string userId = "";
@@ -147,6 +197,55 @@
         jobs = (await db.JobOpportunities.Include(job => job.Documents).Include(job => job.Activities)
             .Where(job => job.UserId == userId).ToListAsync())
             .OrderByDescending(job => job.ImportedAt).ToList();
+        sourceDocuments = (await db.CandidateSourceDocuments.Where(source => source.UserId == userId).ToListAsync())
+            .OrderByDescending(source => source.ImportedAt).ToList();
+    }
+
+    private async Task PreviewSourceDocumentAsync(InputFileChangeEventArgs eventArgs)
+    {
+        pendingSource = null;
+        try
+        {
+            var file = eventArgs.File;
+            await using var stream = file.OpenReadStream(CandidateDocumentImportService.MaxFileBytes);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            pendingSource = await DocumentImporter.ExtractAsync(file.Name, sourceKind, buffer.ToArray());
+            message = "Review the extracted text before saving it.";
+        }
+        catch (DocumentExtraction.DocumentReadException exception)
+        {
+            message = exception.Code switch
+            {
+                "SIZE_LIMIT" => "Choose a nonempty file no larger than 2 MB.",
+                "NO_TEXT" => "No text was found. Scanned PDFs need OCR before they can be imported.",
+                _ => "This document could not be read. Check that it is a valid TXT, DOCX, or text-based PDF."
+            };
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or ArgumentException)
+        {
+            message = "Choose a valid TXT, DOCX, or text-based PDF no larger than 2 MB.";
+        }
+    }
+
+    private async Task SaveSourceDocumentAsync()
+    {
+        if (pendingSource is null) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        db.CandidateSourceDocuments.Add(new CandidateSourceDocument
+        {
+            UserId = userId,
+            FileName = pendingSource.FileName,
+            Kind = pendingSource.Kind,
+            MediaType = pendingSource.MediaType,
+            SourceSha256 = pendingSource.SourceSha256,
+            ExtractedText = pendingSource.ExtractedText,
+            ReviewNotes = pendingSource.ReviewNotes
+        });
+        await db.SaveChangesAsync();
+        pendingSource = null;
+        message = "Document text imported. Review and copy relevant facts into your profile or evidence library.";
+        await ReloadAsync();
     }
 
     private async Task SaveProfileAsync()
@@ -231,6 +330,34 @@
         await db.SaveChangesAsync();
         message = "Version approved and available for export.";
         await ReloadAsync();
+    }
+
+    private Task ExportDocxAsync(int documentId) => ExportAsync(documentId, "docx");
+    private Task ExportPdfAsync(int documentId) => ExportAsync(documentId, "pdf");
+
+    private async Task ExportAsync(int documentId, string format)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var document = await db.DocumentVersions
+            .Join(db.JobOpportunities, version => version.JobOpportunityId, job => job.Id,
+                (version, job) => new { Version = version, job.UserId })
+            .SingleOrDefaultAsync(item => item.Version.Id == documentId && item.UserId == userId);
+        if (document?.Version.ApprovedAt is null)
+        {
+            message = "Approve this document version before export.";
+            return;
+        }
+        var content = format == "pdf" ? Documents.ToPdf(document.Version.Content) : Documents.ToDocx(document.Version.Content);
+        var mediaType = format == "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        try
+        {
+            var saved = await ClientExport.SaveAsync(content, $"application-{documentId}.{format}", mediaType);
+            message = saved ? "Document saved." : "Save canceled.";
+        }
+        catch (IOException)
+        {
+            message = "The document could not be saved at that location.";
+        }
     }
 
     private async Task MarkSubmittedAsync(int jobId)

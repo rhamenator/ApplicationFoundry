@@ -58,19 +58,23 @@ internal static class Program
         services.AddSingleton<IFitScorer, ManagedFitScorer>();
         services.AddHttpClient<IJobDiscoveryService, RemoteJobDiscoveryService>();
         services.AddSingleton<ICareerDocumentService, CareerDocumentService>();
+        services.AddSingleton<ICandidateDocumentImportService, CandidateDocumentImportService>();
+        var desktopExport = new DesktopDocumentExport();
+        services.AddSingleton<IClientDocumentExport>(desktopExport);
 
         using var provider = services.BuildServiceProvider();
         using (var scope = provider.CreateScope())
             scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Database.Migrate();
 
-        Application.Run(new DesktopWindow(provider));
+        Application.Run(new DesktopWindow(provider, desktopExport));
     }
 }
 
 internal sealed class DesktopWindow : Form
 {
-    public DesktopWindow(IServiceProvider services)
+    public DesktopWindow(IServiceProvider services, DesktopDocumentExport desktopExport)
     {
+        desktopExport.Owner = this;
         Text = "Application Foundry";
         Width = 1280;
         Height = 850;
@@ -85,6 +89,45 @@ internal sealed class DesktopWindow : Form
         };
         view.RootComponents.Add<Studio>("#app");
         Controls.Add(view);
+    }
+}
+
+internal sealed class DesktopDocumentExport : IClientDocumentExport
+{
+    public Form? Owner { get; set; }
+    public bool IsAvailable => true;
+
+    public Task<bool> SaveAsync(byte[] content, string fileName, string mediaType)
+    {
+        var owner = Owner ?? throw new InvalidOperationException("The desktop window is unavailable.");
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void SaveOnUiThread()
+        {
+            try
+            {
+                using var dialog = new SaveFileDialog
+                {
+                    FileName = fileName,
+                    Filter = mediaType == "application/pdf" ? "PDF document (*.pdf)|*.pdf" : "Word document (*.docx)|*.docx",
+                    AddExtension = true,
+                    OverwritePrompt = true
+                };
+                if (dialog.ShowDialog(owner) != DialogResult.OK)
+                {
+                    completion.SetResult(false);
+                    return;
+                }
+                File.WriteAllBytes(dialog.FileName, content);
+                completion.SetResult(true);
+            }
+            catch (Exception exception)
+            {
+                completion.SetException(exception);
+            }
+        }
+        if (owner.InvokeRequired) owner.BeginInvoke(SaveOnUiThread);
+        else SaveOnUiThread();
+        return completion.Task;
     }
 }
 

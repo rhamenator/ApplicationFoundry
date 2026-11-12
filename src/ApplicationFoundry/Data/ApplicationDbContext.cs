@@ -7,6 +7,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 {
     public DbSet<CandidateProfile> CandidateProfiles => Set<CandidateProfile>();
     public DbSet<EvidenceItem> EvidenceItems => Set<EvidenceItem>();
+    public DbSet<CandidateSourceDocument> CandidateSourceDocuments => Set<CandidateSourceDocument>();
     public DbSet<JobOpportunity> JobOpportunities => Set<JobOpportunity>();
     public DbSet<DocumentVersion> DocumentVersions => Set<DocumentVersion>();
     public DbSet<ApplicationActivity> ApplicationActivities => Set<ApplicationActivity>();
@@ -15,6 +16,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     {
         base.OnModelCreating(builder);
         builder.Entity<CandidateProfile>().HasIndex(profile => profile.UserId).IsUnique();
+        builder.Entity<CandidateSourceDocument>().HasIndex(document => new { document.UserId, document.ImportedAt });
         builder.Entity<JobOpportunity>().HasIndex(job => new { job.UserId, job.Status });
         builder.Entity<EvidenceItem>()
             .HasOne<CandidateProfile>()

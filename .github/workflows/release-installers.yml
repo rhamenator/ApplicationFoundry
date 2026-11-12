@@ -27,6 +27,8 @@ jobs:
             echo "app_version=0.1.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
           fi
       - uses: actions/checkout@v6
+        with:
+          submodules: true
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
@@ -40,6 +42,8 @@ jobs:
       APP_VERSION: ${{ needs.test.outputs.app_version }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: true
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
@@ -61,6 +65,8 @@ jobs:
       APP_VERSION: ${{ needs.test.outputs.app_version }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: true
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
@@ -88,6 +94,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: true
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
@@ -112,6 +120,8 @@ jobs:
       APP_VERSION: ${{ needs.test.outputs.app_version }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: true
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x

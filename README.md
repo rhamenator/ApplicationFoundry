@@ -11,7 +11,8 @@ profile, evidence library, local fit signals, versioned resume and cover letter
 drafts, approval before export, and an activity log. The experimental desktop
 branch adds a Remote OK feed whose listings are ranked locally; broader job
 discovery, application form assistance, and the full follow-up workflow remain
-in development.
+in development. It also accepts TXT, DOCX, and text-based PDF source documents
+for review; imported text can be copied into the profile and evidence library.
 
 Application form assistance is part of the intended workflow, reflecting the
 original Access databases. The app should reuse verified profile details and
@@ -24,6 +25,9 @@ Name data uses these explicit fields: title, first name, middle initial(s), last
 name, suffix, and preferred display name.
 
 ## Run locally
+
+Clone with submodules, or run `git submodule update --init --recursive` in an
+existing checkout. The document extractor is pinned under `external/`.
 
 ```powershell
 dotnet restore --force-evaluate
@@ -47,8 +51,9 @@ finishes.
 
 Pull request builds also produce a separate **Application Foundry Desktop
 Prototype** installer. Its Start menu shortcut opens a desktop window without
-the server console. The desktop prototype is experimental and does not yet
-support document export or external application forms.
+the server console. Approved desktop drafts can be saved with a Windows file
+dialog as DOCX or PDF. The desktop prototype is experimental and does not yet
+support external application forms.
 
 The fit scorer runs a small ONNX logistic model entirely in the application
 process. Its four visible inputs measure keyword evidence, overall profile
@@ -66,4 +71,5 @@ a real sender, durable data-protection keys, HTTPS termination, and production
 secret storage before hosting for other users.
 
 See [Architecture](docs/ARCHITECTURE.md) and
-[Clean-room boundary](docs/CLEAN_ROOM_BOUNDARY.md).
+[Clean-room boundary](docs/CLEAN_ROOM_BOUNDARY.md). The remaining stable-release
+gates are tracked in [Release scope](docs/RELEASE-SCOPE.md).

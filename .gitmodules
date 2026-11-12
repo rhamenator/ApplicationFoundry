@@ -1,0 +1,3 @@
+[submodule "external/document-extraction-dotnet"]
+	path = external/document-extraction-dotnet
+	url = https://github.com/rhamenator/document-extraction-dotnet.git
