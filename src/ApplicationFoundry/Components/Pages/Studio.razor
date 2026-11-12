@@ -275,6 +275,23 @@
                     <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="() => UseProfileFact(job.Id, ProfileFact.Phone)">Use saved phone</button>
                 </div>
                 <button class="btn btn-sm btn-outline-primary mt-2" type="button" @onclick="() => AddPreparedAnswerAsync(job.Id)">Save reviewed answer</button>
+                <h4 class="mt-3">Preview a form match</h4>
+                <p>Paste a form snapshot containing only its HTTPS URL and field labels, types, requirements, and select choices. The preview stays on this computer and does not enter or send values.</p>
+                <details><summary>Form snapshot format</summary><pre>{"url":"https://example.test/apply","fields":[{"key":"email","label":"Email","type":"email","required":true}]}</pre></details>
+                <label>Form snapshot JSON<textarea class="form-control" rows="4" maxlength="65536" @bind="formDrafts[job.Id].SnapshotJson"></textarea></label>
+                <button class="btn btn-sm btn-outline-secondary mt-2" type="button" @onclick="() => PreviewFormMatch(job.Id)">Preview reviewed answers</button>
+                @if (formDrafts[job.Id].FormPreview is { } preview)
+                {
+                    <p class="mt-2"><strong>@(preview.IsComplete ? "Ready to review" : "Cannot safely match this form")</strong></p>
+                    @foreach (var reason in preview.Reasons)
+                    {
+                        <p>@reason</p>
+                    }
+                    @foreach (var value in preview.Values)
+                    {
+                        <p><strong>@value.Label:</strong> @value.Value</p>
+                    }
+                }
                 <h4 class="mt-3">Values entered in the employer form</h4>
                 <p>After entering a value on the employer's site, record the exact value here. This does not fill or send the form.</p>
                 @if (job.FormPlan is not null)
@@ -865,6 +882,21 @@
         await ReloadAsync();
     }
 
+    private void PreviewFormMatch(int jobId)
+    {
+        var draft = formDrafts[jobId];
+        draft.FormPreview = null;
+        if (!EmployerFormSnapshotCodec.TryParse(draft.SnapshotJson, out var snapshot, out var error))
+        {
+            message = error;
+            return;
+        }
+        draft.FormPreview = EmployerFormFillPlanner.Prepare(jobs.Single(job => job.Id == jobId), snapshot!);
+        message = draft.FormPreview.IsComplete
+            ? "Reviewed answers match this form snapshot. No values were entered or sent."
+            : "The form match is blocked; review the reasons below.";
+    }
+
     private sealed class FormPlanDraft
     {
         public FormSubmissionMode Mode { get; set; }
@@ -875,6 +907,8 @@
         public string EntryFieldLabel { get; set; } = "";
         public string EntryValue { get; set; } = "";
         public bool ConfirmSentEntries { get; set; }
+        public string SnapshotJson { get; set; } = "";
+        public FormFillProposal? FormPreview { get; set; }
     }
 
     private sealed class FollowUpDraft
