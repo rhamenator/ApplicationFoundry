@@ -33,6 +33,16 @@ public sealed class CandidateDocumentImportTests
     }
 
     [Fact]
+    public async Task Pdf_export_preserves_evidence_bullets_for_reimport()
+    {
+        var pdf = await importer.ExtractAsync("resume.pdf", "resume",
+            documents.ToPdf("Jordan Example\nSELECTED EVIDENCE\n• Built reliable distributed services"));
+
+        Assert.Contains("• Built reliable distributed services", pdf.ExtractedText);
+        Assert.Contains("Built reliable distributed services", CandidateFactMapper.Suggest(pdf.ExtractedText).Claims);
+    }
+
+    [Fact]
     public async Task Rejects_unsupported_and_mislabeled_files()
     {
         await Assert.ThrowsAsync<ArgumentException>(() => importer.ExtractAsync("resume.doc", "resume", "old"u8.ToArray()));

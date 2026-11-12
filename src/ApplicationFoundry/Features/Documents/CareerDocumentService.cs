@@ -51,7 +51,7 @@ public sealed class CareerDocumentService : ICareerDocumentService
         var lines = content.Replace("\r", "").Split('\n')
             .SelectMany(line => line.Length == 0 ? [""] : Enumerable.Range(0, (line.Length + 89) / 90)
                 .Select(index => line.Substring(index * 90, Math.Min(90, line.Length - index * 90))))
-            .Select(EscapePdf).ToArray();
+            .Select(line => EscapePdf(ToWinAnsi(line))).ToArray();
         var pages = lines.Chunk(48).ToArray();
         var fontId = 3 + pages.Length * 2;
         var objects = new List<string>
@@ -66,11 +66,11 @@ public sealed class CareerDocumentService : ICareerDocumentService
             foreach (var line in pages[pageIndex]) body.Append('(').Append(line).Append(") Tj T* ");
             body.Append("ET");
             objects.Add($"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 {fontId} 0 R >> >> /Contents {contentId} 0 R >>");
-            objects.Add($"<< /Length {Encoding.ASCII.GetByteCount(body.ToString())} >>\nstream\n{body}\nendstream");
+            objects.Add($"<< /Length {Encoding.Latin1.GetByteCount(body.ToString())} >>\nstream\n{body}\nendstream");
         }
-        objects.Add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+        objects.Add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
         using var output = new MemoryStream();
-        using var writer = new StreamWriter(output, Encoding.ASCII, 1024, true) { NewLine = "\n" };
+        using var writer = new StreamWriter(output, Encoding.Latin1, 1024, true) { NewLine = "\n" };
         writer.WriteLine("%PDF-1.4"); writer.Flush();
         var offsets = new List<long> { 0 };
         for (var index = 0; index < objects.Count; index++)
@@ -98,4 +98,11 @@ public sealed class CareerDocumentService : ICareerDocumentService
     }
 
     private static string EscapePdf(string value) => value.Replace("\\", "\\\\").Replace("(", "\\(").Replace(")", "\\)");
+
+    // WinAnsi uses Windows-1252 positions for punctuation above ASCII. Latin1
+    // writes those byte values without introducing a platform code-page dependency.
+    private static string ToWinAnsi(string value) => value
+        .Replace('•', '\u0095').Replace('–', '\u0096').Replace('—', '\u0097')
+        .Replace('‘', '\u0091').Replace('’', '\u0092')
+        .Replace('“', '\u0093').Replace('”', '\u0094');
 }
