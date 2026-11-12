@@ -231,7 +231,7 @@
             }
             <details class="mt-2">
                 <summary>Application form preparation · @(job.FormPlan is null ? "not started" : job.FormPlan.Mode.ToString())</summary>
-                <p class="mt-2">Prepare answers for this employer's form. Choose how much submission assistance you want. This version saves your preference and answers locally; it does not fill or submit an employer form.</p>
+                <p class="mt-2">Prepare answers for this employer's form and choose your submission preference. The browser helper can fill exact values after your authorization; it never submits the form.</p>
                 <label>Submission preference
                     <select class="form-select" @bind="formDrafts[job.Id].Mode">
                         <option value="SubmitPersonally">Review and submit personally</option>
@@ -295,7 +295,7 @@
                     }
                     @if (preview.IsComplete)
                     {
-                        <p>Review these exact values before authorizing a fill attempt. Authorization lasts ten minutes and is lost if the form or reviewed packet changes. This version does not fill or submit the form.</p>
+                        <p>Review these exact values before authorizing a fill attempt. Authorization lasts ten minutes and is lost if the form or reviewed packet changes. Authorizing alone does not fill or submit the form.</p>
                         <button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => AuthorizeFormMatchAsync(job.Id)">Authorize these proposed values</button>
                         @if (IsFormMatchAuthorized(job))
                         {
