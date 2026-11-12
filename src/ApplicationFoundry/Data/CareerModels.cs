@@ -67,6 +67,7 @@ public sealed class JobOpportunity
     [Required, MaxLength(30000)] public string Description { get; set; } = "";
     public OpportunityStatus Status { get; set; } = OpportunityStatus.Interested;
     public DateTimeOffset ImportedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateOnly? NextFollowUpOn { get; set; }
     public float FitScore { get; set; }
     [MaxLength(2000)] public string FitExplanation { get; set; } = "";
     public List<DocumentVersion> Documents { get; set; } = [];

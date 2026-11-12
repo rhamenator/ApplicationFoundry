@@ -415,6 +415,9 @@ namespace ApplicationFoundry.Migrations
                     b.Property<DateTimeOffset>("ImportedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateOnly?>("NextFollowUpOn")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Organization")
                         .IsRequired()
                         .HasMaxLength(200)

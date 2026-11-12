@@ -287,6 +287,22 @@
                 <label><input type="checkbox" @bind="formDrafts[job.Id].ConfirmSentEntries" /> I confirm the recorded field values are exactly what I sent to this employer.</label>
             }
             <button class="btn btn-sm btn-outline-primary" @onclick="() => MarkSubmittedAsync(job.Id)">Record manual submission</button>
+            <details class="mt-3">
+                <summary>Follow-up · @(job.NextFollowUpOn is null ? "none scheduled" : job.NextFollowUpOn.Value.ToString("d"))</summary>
+                <p class="mt-2">Plan your next contact and keep a local record of what you did.</p>
+                <label>Next follow-up date<input class="form-control" type="date" @bind="followUpDrafts[job.Id].DueOn" /></label>
+                <button class="btn btn-sm btn-outline-primary mt-2" type="button" @onclick="() => ScheduleFollowUpAsync(job.Id)">Schedule follow-up</button>
+                @if (job.NextFollowUpOn is not null)
+                {
+                    <button class="btn btn-sm btn-outline-secondary mt-2" type="button" @onclick="() => ClearFollowUpAsync(job.Id)">Clear date</button>
+                }
+                <label class="mt-3">Follow-up note<textarea class="form-control" rows="2" @bind="followUpDrafts[job.Id].Note"></textarea></label>
+                <button class="btn btn-sm btn-outline-primary mt-2" type="button" @onclick="() => RecordFollowUpAsync(job.Id)">Record follow-up</button>
+                @foreach (var activity in job.Activities.OrderByDescending(activity => activity.OccurredAt))
+                {
+                    <p class="mt-2"><strong>@activity.Action</strong> · @activity.OccurredAt.ToLocalTime().ToString("g") · @activity.Note</p>
+                }
+            </details>
         </article>
     }
 </section>
@@ -297,6 +313,7 @@
     private JobOpportunity newJob = new();
     private List<JobOpportunity> jobs = [];
     private Dictionary<int, FormPlanDraft> formDrafts = [];
+    private Dictionary<int, FollowUpDraft> followUpDrafts = [];
     private List<CandidateSourceDocument> sourceDocuments = [];
     private CandidateDocumentImport? pendingSource;
     private int mappingSourceId;
@@ -340,6 +357,10 @@
         {
             Mode = job.FormPlan?.Mode ?? FormSubmissionMode.SubmitPersonally,
             Rules = job.FormPlan?.Rules ?? ""
+        });
+        followUpDrafts = jobs.ToDictionary(job => job.Id, job => new FollowUpDraft
+        {
+            DueOn = job.NextFollowUpOn?.ToDateTime(TimeOnly.MinValue)
         });
         sourceDocuments = (await db.CandidateSourceDocuments.Where(source => source.UserId == userId).ToListAsync())
             .OrderByDescending(source => source.ImportedAt).ToList();
@@ -611,6 +632,52 @@
         await ReloadAsync();
     }
 
+    private async Task ScheduleFollowUpAsync(int jobId)
+    {
+        var draft = followUpDrafts[jobId];
+        if (draft.DueOn is null || draft.DueOn.Value.Date < DateTime.Today)
+        {
+            message = "Choose today or a future date for the next follow-up.";
+            return;
+        }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        if (job is null) return;
+        job.NextFollowUpOn = DateOnly.FromDateTime(draft.DueOn.Value);
+        await db.SaveChangesAsync();
+        message = "Follow-up date saved locally.";
+        await ReloadAsync();
+    }
+
+    private async Task ClearFollowUpAsync(int jobId)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        if (job is null) return;
+        job.NextFollowUpOn = null;
+        await db.SaveChangesAsync();
+        message = "Follow-up date cleared.";
+        await ReloadAsync();
+    }
+
+    private async Task RecordFollowUpAsync(int jobId)
+    {
+        var note = followUpDrafts[jobId].Note.Trim();
+        if (note.Length is < 1 or > 1000)
+        {
+            message = "Enter a follow-up note of 1000 characters or fewer.";
+            return;
+        }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        if (job is null) return;
+        job.Activities.Add(new ApplicationActivity { Action = "follow-up", Note = note });
+        job.NextFollowUpOn = null;
+        await db.SaveChangesAsync();
+        message = "Follow-up recorded. Schedule another date if needed.";
+        await ReloadAsync();
+    }
+
     private enum ProfileFact { FullName, Email, Phone }
 
     private void UseProfileFact(int jobId, ProfileFact field)
@@ -748,5 +815,11 @@
         public string EntryFieldLabel { get; set; } = "";
         public string EntryValue { get; set; } = "";
         public bool ConfirmSentEntries { get; set; }
+    }
+
+    private sealed class FollowUpDraft
+    {
+        public DateTime? DueOn { get; set; }
+        public string Note { get; set; } = "";
     }
 }
