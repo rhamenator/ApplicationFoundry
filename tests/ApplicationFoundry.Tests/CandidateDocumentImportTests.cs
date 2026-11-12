@@ -39,4 +39,18 @@ public sealed class CandidateDocumentImportTests
         var error = await Assert.ThrowsAsync<DocumentImportException>(() => importer.ExtractAsync("resume.pdf", "resume", "not a PDF"u8.ToArray()));
         Assert.Equal("PDF_SIGNATURE", error.Code);
     }
+
+    [Fact]
+    public void Suggests_only_reviewable_facts_from_imported_text()
+    {
+        const string text = "Avery Rivera\navery@example.com | (313) 555-0123\nProfessional Summary\nReliable systems engineer with experience in testing.\n\nExperience\n• Built reliable release pipelines for multiple products\n- Reduced support requests through clearer documentation\n• Built reliable release pipelines for multiple products";
+
+        var suggestions = CandidateFactMapper.Suggest(text);
+
+        Assert.Equal("avery@example.com", suggestions.Email);
+        Assert.Equal("(313) 555-0123", suggestions.Phone);
+        Assert.Equal("Reliable systems engineer with experience in testing.", suggestions.Summary);
+        Assert.Equal(2, suggestions.Claims.Count);
+        Assert.Equal("Built reliable release pipelines for multiple products", suggestions.Claims[0]);
+    }
 }

@@ -90,7 +90,43 @@
                 <p class="text-warning">Extraction notes: @source.ReviewNotes</p>
             }
             <pre class="document-preview">@source.ExtractedText</pre>
+            <button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => ReviewSourceFacts(source)">Review suggested facts</button>
         </details>
+    }
+    @if (mappingSourceId != 0)
+    {
+        <div class="mt-3">
+            <h3>Review facts from @mappingSourceName</h3>
+            <p>These are suggestions from the imported text. Edit them before using them; check every claim against the original document.</p>
+            <div class="profile-grid">
+                <label>Suggested email<input class="form-control" @bind="mappingEmail" /></label>
+                <label>Suggested phone<input class="form-control" @bind="mappingPhone" /></label>
+            </div>
+            <label>Suggested professional summary<textarea class="form-control" rows="4" @bind="mappingSummary"></textarea></label>
+            <button class="btn btn-outline-primary mt-2" type="button" @onclick="ApplyProfileSuggestions">Use in profile draft</button>
+            <p class="text-secondary">Profile changes are saved when you select Save profile above.</p>
+            <h4>Possible evidence claims</h4>
+            @if (mappingClaims.Count == 0)
+            {
+                <p>No bullet claims were found. You can still add evidence manually above.</p>
+            }
+            @foreach (var suggestion in mappingClaims)
+            {
+                <div class="mt-3">
+                    <label>Evidence claim<input class="form-control" @bind="suggestion.Claim" /></label>
+                    <div class="profile-grid">
+                        <label>Kind<input class="form-control" @bind="suggestion.Kind" /></label>
+                        <label>Keywords (comma separated)<input class="form-control" @bind="suggestion.Keywords" /></label>
+                    </div>
+                    <label>Details<textarea class="form-control" rows="2" @bind="suggestion.Details"></textarea></label>
+                    <button class="btn btn-sm btn-outline-primary mt-1" type="button" disabled="@(profile.Id == 0 || suggestion.Added)" @onclick="() => AddSuggestedEvidenceAsync(suggestion)">@(suggestion.Added ? "Added" : "Add to evidence")</button>
+                </div>
+            }
+            @if (profile.Id == 0 && mappingClaims.Count > 0)
+            {
+                <p>Save the profile before adding evidence claims.</p>
+            }
+        </div>
     }
 </section>
 
@@ -176,6 +212,13 @@
     private List<JobOpportunity> jobs = [];
     private List<CandidateSourceDocument> sourceDocuments = [];
     private CandidateDocumentImport? pendingSource;
+    private int mappingSourceId;
+    private string mappingSourceName = "";
+    private string mappingSourceHash = "";
+    private string mappingEmail = "";
+    private string mappingPhone = "";
+    private string mappingSummary = "";
+    private List<EvidenceSuggestionDraft> mappingClaims = [];
     private string sourceKind = "resume";
     private IReadOnlyList<DiscoveredJob> discoveredJobs = [];
     private bool isSearching;
@@ -245,8 +288,70 @@
         });
         await db.SaveChangesAsync();
         pendingSource = null;
-        message = "Document text imported. Review and copy relevant facts into your profile or evidence library.";
+        message = "Document text imported. Review suggested facts to add them to your profile or evidence library.";
         await ReloadAsync();
+    }
+
+    private void ReviewSourceFacts(CandidateSourceDocument source)
+    {
+        mappingSourceId = source.Id;
+        mappingSourceName = source.FileName;
+        mappingSourceHash = source.SourceSha256;
+        var suggestions = CandidateFactMapper.Suggest(source.ExtractedText);
+        mappingEmail = suggestions.Email;
+        mappingPhone = suggestions.Phone;
+        mappingSummary = suggestions.Summary;
+        mappingClaims = suggestions.Claims.Select(claim => new EvidenceSuggestionDraft { Claim = claim }).ToList();
+        message = "Review and edit suggestions before using them.";
+    }
+
+    private void ApplyProfileSuggestions()
+    {
+        if (!string.IsNullOrWhiteSpace(mappingEmail)) profile.Email = mappingEmail.Trim();
+        if (!string.IsNullOrWhiteSpace(mappingPhone)) profile.Phone = mappingPhone.Trim();
+        if (!string.IsNullOrWhiteSpace(mappingSummary)) profile.Summary = mappingSummary.Trim();
+        message = "Suggested details copied into the profile draft. Review and save the profile above.";
+    }
+
+    private async Task AddSuggestedEvidenceAsync(EvidenceSuggestionDraft suggestion)
+    {
+        if (profile.Id == 0 || suggestion.Added) return;
+        var claim = suggestion.Claim.Trim();
+        var kind = suggestion.Kind.Trim();
+        var keywords = suggestion.Keywords.Trim();
+        var details = suggestion.Details.Trim();
+        if (claim.Length is < 1 or > 240 || kind.Length is < 1 or > 80 || keywords.Length > 1000 || details.Length > 3700)
+        {
+            message = "Check the evidence lengths: claim 1–240, kind 1–80, keywords up to 1000, and details up to 3700 characters.";
+            return;
+        }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        if (!await db.CandidateSourceDocuments.AnyAsync(source => source.Id == mappingSourceId && source.UserId == userId))
+        {
+            message = "The imported source could not be found.";
+            return;
+        }
+        db.EvidenceItems.Add(new EvidenceItem
+        {
+            ProfileId = profile.Id,
+            Kind = kind,
+            Claim = claim,
+            Keywords = keywords,
+            Details = $"{details}\nSource: {mappingSourceName} (SHA-256: {mappingSourceHash})".Trim()
+        });
+        await db.SaveChangesAsync();
+        suggestion.Added = true;
+        message = "Reviewed evidence claim added.";
+        await ReloadAsync();
+    }
+
+    private sealed class EvidenceSuggestionDraft
+    {
+        public string Claim { get; set; } = "";
+        public string Kind { get; set; } = "achievement";
+        public string Keywords { get; set; } = "";
+        public string Details { get; set; } = "";
+        public bool Added { get; set; }
     }
 
     private async Task SaveProfileAsync()
