@@ -292,6 +292,15 @@
                     {
                         <p><strong>@value.Label:</strong> @value.Value</p>
                     }
+                    @if (preview.IsComplete)
+                    {
+                        <p>Review these exact values before authorizing a fill attempt. Authorization lasts ten minutes and is lost if the form or reviewed packet changes. This version does not fill or submit the form.</p>
+                        <button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => AuthorizeFormMatchAsync(job.Id)">Authorize these proposed values</button>
+                        @if (IsFormMatchAuthorized(job))
+                        {
+                            <p class="mt-2">Authorized for this exact form match until @formDrafts[job.Id].FormAuthorization!.AuthorizedAt.Add(FormFillAuthorizer.MaxAge).ToLocalTime().ToString("g"). No values were entered or sent.</p>
+                        }
+                    }
                 }
                 <h4 class="mt-3">Values entered in the employer form</h4>
                 <p>After entering a value on the employer's site, record the exact value here. This does not fill or send the form.</p>
@@ -887,15 +896,49 @@
     {
         var draft = formDrafts[jobId];
         draft.FormPreview = null;
+        draft.PreviewFingerprint = "";
+        draft.FormAuthorization = null;
         if (!EmployerFormSnapshotCodec.TryParse(draft.SnapshotJson, out var snapshot, out var error))
         {
             message = error;
             return;
         }
-        draft.FormPreview = EmployerFormFillPlanner.Prepare(jobs.Single(job => job.Id == jobId), snapshot!);
+        var job = jobs.Single(job => job.Id == jobId);
+        draft.FormPreview = EmployerFormFillPlanner.Prepare(job, snapshot!);
+        draft.PreviewFingerprint = FormFillAuthorizer.Authorize(job, snapshot!)?.Fingerprint ?? "";
         message = draft.FormPreview.IsComplete
             ? "Reviewed answers match this form snapshot. No values were entered or sent."
             : "The form match is blocked; review the reasons below.";
+    }
+
+    private async Task AuthorizeFormMatchAsync(int jobId)
+    {
+        var draft = formDrafts[jobId];
+        draft.FormAuthorization = null;
+        if (draft.FormPreview?.IsComplete != true || draft.PreviewFingerprint.Length == 0 ||
+            !EmployerFormSnapshotCodec.TryParse(draft.SnapshotJson, out var snapshot, out _))
+        {
+            message = "Preview this form and its proposed values again before authorizing.";
+            return;
+        }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.Include(item => item.FormPlan).ThenInclude(plan => plan!.Answers)
+            .SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        var authorization = job is null ? null : FormFillAuthorizer.Authorize(job, snapshot!);
+        if (authorization is null || !string.Equals(authorization.Fingerprint, draft.PreviewFingerprint, StringComparison.Ordinal))
+        {
+            message = "The form or reviewed answers changed. Preview the current match before authorizing.";
+            return;
+        }
+        draft.FormAuthorization = authorization;
+        message = "Exact form match authorized locally for ten minutes. No values were entered or sent.";
+    }
+
+    private bool IsFormMatchAuthorized(JobOpportunity job)
+    {
+        var draft = formDrafts[job.Id];
+        return EmployerFormSnapshotCodec.TryParse(draft.SnapshotJson, out var snapshot, out _) &&
+            FormFillAuthorizer.IsCurrent(job, snapshot!, draft.FormAuthorization);
     }
 
     private sealed class FormPlanDraft
@@ -910,6 +953,8 @@
         public bool ConfirmSentEntries { get; set; }
         public string SnapshotJson { get; set; } = "";
         public FormFillProposal? FormPreview { get; set; }
+        public string PreviewFingerprint { get; set; } = "";
+        public FormFillAuthorization? FormAuthorization { get; set; }
     }
 
     private sealed class FollowUpDraft
