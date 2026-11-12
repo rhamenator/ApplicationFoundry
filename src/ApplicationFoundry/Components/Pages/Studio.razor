@@ -355,7 +355,7 @@
             var saved = await ClientExport.SaveAsync(content, $"application-{documentId}.{format}", mediaType);
             message = saved ? "Document saved." : "Save canceled.";
         }
-        catch (IOException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             message = "The document could not be saved at that location.";
         }
