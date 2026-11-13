@@ -51,6 +51,18 @@ public sealed class CandidateDocumentImportTests
     }
 
     [Fact]
+    public async Task Distinguishes_empty_documents_from_pdfs_needing_ocr()
+    {
+        var emptyText = await Assert.ThrowsAsync<DocumentImportException>(() =>
+            importer.ExtractAsync("blank.txt", "other", " "u8.ToArray()));
+        Assert.Equal("NO_TEXT", emptyText.Code);
+
+        var noTextPdf = await Assert.ThrowsAsync<DocumentImportException>(() =>
+            importer.ExtractAsync("scan.pdf", "resume", documents.ToPdf(" ")));
+        Assert.Equal("OCR_REQUIRED", noTextPdf.Code);
+    }
+
+    [Fact]
     public void Suggests_only_reviewable_facts_from_imported_text()
     {
         const string text = "Avery Rivera\navery@example.com | (313) 555-0123\nProfessional Summary\nReliable systems engineer with experience in testing.\n\nExperience\n• Built reliable release pipelines for multiple products\n- Reduced support requests through clearer documentation\n• Built reliable release pipelines for multiple products";

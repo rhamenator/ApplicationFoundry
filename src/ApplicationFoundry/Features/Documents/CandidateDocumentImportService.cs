@@ -49,7 +49,7 @@ public sealed class CandidateDocumentImportService : ICandidateDocumentImportSer
             _ => throw new ArgumentException("Choose a TXT, DOCX, or PDF file.", nameof(fileName))
         };
         if (string.IsNullOrWhiteSpace(text))
-            throw new DocumentImportException("NO_TEXT");
+            throw new DocumentImportException(mediaType == "application/pdf" ? "OCR_REQUIRED" : "NO_TEXT");
         if (text.Length > MaxCharacters)
             throw new DocumentImportException("TEXT_LIMIT");
         var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));

@@ -658,7 +658,8 @@
             message = exception.Code switch
             {
                 "SIZE_LIMIT" => "Choose a nonempty file no larger than 2 MB.",
-                "NO_TEXT" => "No text was found. Scanned PDFs need OCR before they can be imported.",
+                "OCR_REQUIRED" => "No PDF text was found. Run OCR on this scanned PDF, then import the searchable PDF.",
+                "NO_TEXT" => "No text was found in this document. Choose a document with content.",
                 _ => "This document could not be read. Check that it is a valid TXT, DOCX, or text-based PDF."
             };
         }
