@@ -107,7 +107,7 @@ public sealed class CareerDocumentService : ICareerDocumentService
             ? "<w:pPr><w:spacing w:after=\"80\"/></w:pPr>"
             : heading
                 ? "<w:pPr><w:keepNext/><w:spacing w:before=\"160\" w:after=\"80\"/></w:pPr>"
-                : bullet ? "<w:pPr><w:ind w:left=\"360\" w:hanging=\"180\"/></w:pPr>" : "";
+                : bullet ? "<w:pPr><w:keepLines/><w:ind w:left=\"360\" w:hanging=\"180\"/></w:pPr>" : "";
         var run = name ? "<w:rPr><w:b/><w:sz w:val=\"32\"/></w:rPr>"
             : heading ? "<w:rPr><w:b/><w:sz w:val=\"22\"/></w:rPr>" : "";
         return $"<w:p>{paragraph}<w:r>{run}<w:t xml:space=\"preserve\">{SecurityElement.Escape(line)}</w:t></w:r></w:p>";
