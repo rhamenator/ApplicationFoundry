@@ -106,4 +106,35 @@ public sealed class LegacyAccessCsvPreviewTests
         Assert.Equal("EVIDENCE_MAPPING", mixed.Code);
         Assert.Equal("CLAIM_LENGTH", length.Code);
     }
+
+    [Fact]
+    public void ProfilePlanTrimsOneRecordAndSkipsEmptyValuesWithoutSaving()
+    {
+        var source = previewer.Preview("profile.csv",
+            "Given,Family,Email,Phone\n Jordan , Example ,jordan@example.test, "u8.ToArray());
+
+        var plan = previewer.PrepareProfileImport(source,
+            ["first-name", "last-name", "email", "phone"]);
+
+        Assert.Equal(3, plan.Fields.Count);
+        Assert.Equal("Jordan", plan.Fields["first-name"]);
+        Assert.Equal("Example", plan.Fields["last-name"]);
+        Assert.Equal("jordan@example.test", plan.Fields["email"]);
+        Assert.Equal(source.SourceSha256, plan.SourceSha256);
+    }
+
+    [Fact]
+    public void ProfilePlanRejectsMultipleRecordsEvidenceAndInvalidEmail()
+    {
+        var multiple = previewer.Preview("profile.csv", "Name\nJordan\nAvery"u8.ToArray());
+        var mixed = previewer.Preview("profile.csv", "Name,Claim\nJordan,Synthetic claim"u8.ToArray());
+        var email = previewer.Preview("profile.csv", "Email\nnot-an-email"u8.ToArray());
+
+        Assert.Equal("PROFILE_ROW_COUNT", Assert.Throws<LegacyAccessCsvPreviewException>(() =>
+            previewer.PrepareProfileImport(multiple, ["first-name"])).Code);
+        Assert.Equal("PROFILE_MAPPING", Assert.Throws<LegacyAccessCsvPreviewException>(() =>
+            previewer.PrepareProfileImport(mixed, ["first-name", "evidence-claim"])).Code);
+        Assert.Equal("PROFILE_EMAIL", Assert.Throws<LegacyAccessCsvPreviewException>(() =>
+            previewer.PrepareProfileImport(email, ["email"])).Code);
+    }
 }

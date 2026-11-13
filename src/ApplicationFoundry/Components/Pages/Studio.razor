@@ -187,6 +187,13 @@
                     </table>
                 </div>
                 <button class="btn btn-outline-primary mt-2" type="button" @onclick="PrepareLegacyEvidenceImport">Prepare evidence import</button>
+                <button class="btn btn-outline-primary mt-2 ms-2" type="button" @onclick="PrepareLegacyProfileImport">Prepare profile import</button>
+            }
+            @if (legacyProfileImportPlan is not null)
+            {
+                <p class="mt-3">Proposed changes to your saved profile from one CSV record:</p>
+                <ul>@foreach (var field in legacyProfileImportPlan.Fields) { <li>@field.Key: @field.Value</li> }</ul>
+                <p class="text-secondary">This is a plan only. No profile fields have been changed.</p>
             }
             @if (legacyImportPlan is not null)
             {
@@ -492,6 +499,7 @@
     private LegacyAccessCsvPreview? pendingLegacyCsv;
     private LegacyAccessMappingPreview? legacyMappedPreview;
     private LegacyEvidenceImportPlan? legacyImportPlan;
+    private LegacyProfileImportPlan? legacyProfileImportPlan;
     private List<LegacyEvidenceImportBatch> legacyImportBatches = [];
     private bool legacyImportConfirmed;
     private bool legacyImportBusy;
@@ -586,6 +594,7 @@
         pendingLegacyCsv = null;
         legacyMappedPreview = null;
         legacyImportPlan = null;
+        legacyProfileImportPlan = null;
         legacyImportConfirmed = false;
         legacyColumnDrafts = [];
         try
@@ -617,6 +626,7 @@
     {
         legacyMappedPreview = null;
         legacyImportPlan = null;
+        legacyProfileImportPlan = null;
         legacyImportConfirmed = false;
     }
 
@@ -624,6 +634,7 @@
     {
         if (pendingLegacyCsv is null) return;
         legacyImportPlan = null;
+        legacyProfileImportPlan = null;
         legacyImportConfirmed = false;
         try
         {
@@ -646,6 +657,7 @@
     private void PrepareLegacyEvidenceImport()
     {
         if (pendingLegacyCsv is null || legacyMappedPreview is null) return;
+        legacyProfileImportPlan = null;
         legacyImportConfirmed = false;
         try
         {
@@ -666,6 +678,31 @@
         }
     }
 
+    private void PrepareLegacyProfileImport()
+    {
+        if (pendingLegacyCsv is null || legacyMappedPreview is null) return;
+        legacyImportPlan = null;
+        legacyImportConfirmed = false;
+        try
+        {
+            legacyProfileImportPlan = LegacyCsvPreviewer.PrepareProfileImport(
+                pendingLegacyCsv, legacyColumnDrafts.Select(draft => draft.Target).ToArray());
+            message = "Review the proposed profile fields. Nothing has been saved.";
+        }
+        catch (LegacyAccessCsvPreviewException exception)
+        {
+            legacyProfileImportPlan = null;
+            message = exception.Code switch
+            {
+                "PROFILE_ROW_COUNT" => "Profile import needs exactly one CSV record. Export one applicant record and try again.",
+                "PROFILE_MAPPING" => "For profile import, map only profile fields and ignore evidence claims.",
+                "PROFILE_LENGTH" => "A mapped profile value is too long. Edit the CSV before importing it.",
+                "PROFILE_EMAIL" => "The mapped email address is invalid. Edit the CSV before importing it.",
+                _ => "No nonempty profile fields were mapped. Check the CSV and mapping."
+            };
+        }
+    }
+
     private async Task ImportLegacyEvidenceAsync()
     {
         if (!legacyImportConfirmed || legacyImportPlan is null || profile.Id == 0 || legacyImportBusy) return;
@@ -676,6 +713,7 @@
             pendingLegacyCsv = null;
             legacyMappedPreview = null;
             legacyImportPlan = null;
+            legacyProfileImportPlan = null;
             legacyImportConfirmed = false;
             legacyColumnDrafts = [];
             await ReloadAsync();

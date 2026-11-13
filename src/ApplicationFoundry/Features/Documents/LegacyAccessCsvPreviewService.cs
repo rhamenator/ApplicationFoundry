@@ -1,5 +1,6 @@
 using System.Text;
 using System.Security.Cryptography;
+using System.ComponentModel.DataAnnotations;
 
 namespace ApplicationFoundry.Features.Documents;
 
@@ -15,6 +16,9 @@ public sealed record LegacyAccessMappingPreview(
 
 public sealed record LegacyEvidenceImportPlan(
     string FileName, string SourceSha256, IReadOnlyList<string> Claims, int EmptyOrDuplicateRows);
+
+public sealed record LegacyProfileImportPlan(
+    string FileName, string SourceSha256, IReadOnlyDictionary<string, string> Fields);
 
 public sealed class LegacyAccessCsvPreviewException(string code) : Exception(code)
 {
@@ -97,6 +101,37 @@ public sealed class LegacyAccessCsvPreviewService
         }
         if (claims.Count == 0) throw new LegacyAccessCsvPreviewException("NO_CLAIMS");
         return new LegacyEvidenceImportPlan(source.FileName, source.SourceSha256, claims, skipped);
+    }
+
+    public LegacyProfileImportPlan PrepareProfileImport(LegacyAccessCsvPreview source, IReadOnlyList<string> targets)
+    {
+        PreviewMapping(source, targets);
+        if (source.RowCount != 1) throw new LegacyAccessCsvPreviewException("PROFILE_ROW_COUNT");
+        if (targets.Any(target => target == "evidence-claim"))
+            throw new LegacyAccessCsvPreviewException("PROFILE_MAPPING");
+
+        var fields = new Dictionary<string, string>(StringComparer.Ordinal);
+        for (var index = 0; index < targets.Count; index++)
+        {
+            var target = targets[index];
+            if (target.Length == 0) continue;
+            var value = source.AllRows[0][index].Trim();
+            if (value.Length == 0) continue;
+            var limit = target switch
+            {
+                "first-name" or "last-name" => 80,
+                "email" => 256,
+                "phone" => 64,
+                "summary" => 4000,
+                _ => throw new LegacyAccessCsvPreviewException("PROFILE_MAPPING")
+            };
+            if (value.Length > limit) throw new LegacyAccessCsvPreviewException("PROFILE_LENGTH");
+            if (target == "email" && !new EmailAddressAttribute().IsValid(value))
+                throw new LegacyAccessCsvPreviewException("PROFILE_EMAIL");
+            fields.Add(target, value);
+        }
+        if (fields.Count == 0) throw new LegacyAccessCsvPreviewException("PROFILE_EMPTY");
+        return new LegacyProfileImportPlan(source.FileName, source.SourceSha256, fields);
     }
 
     private static List<IReadOnlyList<string>> ParseRows(string text)
