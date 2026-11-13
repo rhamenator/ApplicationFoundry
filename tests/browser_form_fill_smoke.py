@@ -19,8 +19,8 @@ match = re.search(r'public const string Script = """\n(.*?)\n\s*""";', source, r
 assert match is not None
 
 
-def run_fixture(directory: Path, changed: bool, invalid_url: bool = False) -> dict:
-    variant = "invalid-url" if invalid_url else "changed" if changed else "matching"
+def run_fixture(directory: Path, changed: bool, invalid_url: bool = False, invalid_date: bool = False) -> dict:
+    variant = "invalid-date" if invalid_date else "invalid-url" if invalid_url else "changed" if changed else "matching"
     fixture = (directory / (variant + ".html")).resolve()
     label = "Email changed" if changed else "Email"
     packet = {
@@ -32,11 +32,13 @@ def run_fixture(directory: Path, changed: bool, invalid_url: bool = False) -> di
             {"key": "availability", "label": "Availability", "type": "select",
              "required": True, "options": ["Two weeks"]},
             {"key": "portfolio", "label": "Portfolio", "type": "url", "required": True},
+            {"key": "start", "label": "Start date", "type": "date", "required": True},
         ],
         "values": [
             {"key": "email", "label": "Email", "value": "avery@example.test"},
             {"key": "availability", "label": "Availability", "value": "Two weeks"},
             {"key": "portfolio", "label": "Portfolio", "value": "http://portfolio.example.test/avery" if invalid_url else "https://portfolio.example.test/avery"},
+            {"key": "start", "label": "Start date", "value": "2026-02-30" if invalid_date else "2026-12-01"},
         ],
         "expiresAt": (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(),
     }
@@ -47,6 +49,7 @@ def run_fixture(directory: Path, changed: bool, invalid_url: bool = False) -> di
         '<label for="availability">Availability</label><select id="availability" required>'
         '<option value="">Choose</option><option value="soon">Two weeks</option></select>'
         '<label for="portfolio">Portfolio</label><input id="portfolio" type="url" required>'
+        '<label for="start">Start date</label><input id="start" type="date" required>'
         '<button type="submit">Submit</button></form><output id="capture"></output><script>'
         'window.submissions=0;document.querySelector("form").addEventListener("submit",'
         'event=>{event.preventDefault();window.submissions++});'
@@ -57,6 +60,7 @@ def run_fixture(directory: Path, changed: bool, invalid_url: bool = False) -> di
         '{message,email:document.querySelector("#email").value,'
         'availability:document.querySelector("#availability").value,'
         'portfolio:document.querySelector("#portfolio").value,'
+        'start:document.querySelector("#start").value,'
         'submissions:window.submissions,receipt:window.receipt})};'
         + match.group(1) + '</script>'
     )
@@ -78,6 +82,7 @@ with tempfile.TemporaryDirectory(dir=repo) as directory:
     assert matching["email"] == "avery@example.test", matching
     assert matching["availability"] == "soon", matching
     assert matching["portfolio"] == "https://portfolio.example.test/avery", matching
+    assert matching["start"] == "2026-12-01", matching
     assert matching["submissions"] == 0, matching
     receipt = json.loads(matching["receipt"])
     assert receipt["jobId"] == 42, receipt
@@ -85,11 +90,13 @@ with tempfile.TemporaryDirectory(dir=repo) as directory:
         {"key": "email", "label": "Email", "value": "avery@example.test"},
         {"key": "availability", "label": "Availability", "value": "Two weeks"},
         {"key": "portfolio", "label": "Portfolio", "value": "https://portfolio.example.test/avery"},
+        {"key": "start", "label": "Start date", "value": "2026-12-01"},
     ], receipt
     changed = run_fixture(folder, True)
     assert changed["email"] == "", changed
     assert changed["availability"] == "", changed
     assert changed["portfolio"] == "", changed
+    assert changed["start"] == "", changed
     assert changed["submissions"] == 0, changed
     assert changed["receipt"] is None, changed
     assert "changed" in changed["message"].lower(), changed
@@ -99,5 +106,11 @@ with tempfile.TemporaryDirectory(dir=repo) as directory:
     assert invalid["receipt"] is None, invalid
     assert invalid["submissions"] == 0, invalid
     assert "https" in invalid["message"].lower(), invalid
+    invalid_date = run_fixture(folder, False, invalid_date=True)
+    assert invalid_date["email"] == "", invalid_date
+    assert invalid_date["start"] == "", invalid_date
+    assert invalid_date["receipt"] is None, invalid_date
+    assert invalid_date["submissions"] == 0, invalid_date
+    assert "date" in invalid_date["message"].lower(), invalid_date
 
-print("Synthetic Chromium fill passed: exact values receipted, changed form and unsafe URL blocked, no submission.")
+print("Synthetic Chromium fill passed: exact values receipted, changed form, unsafe URL and date blocked, no submission.")

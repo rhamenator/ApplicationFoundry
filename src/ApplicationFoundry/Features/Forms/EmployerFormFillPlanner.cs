@@ -1,4 +1,5 @@
 using ApplicationFoundry.Data;
+using System.Globalization;
 
 namespace ApplicationFoundry.Features.Forms;
 
@@ -11,7 +12,7 @@ public static class EmployerFormFillPlanner
 {
     private static readonly HashSet<string> SupportedTypes = new(StringComparer.OrdinalIgnoreCase)
     {
-        "text", "email", "tel", "url", "textarea", "select"
+        "text", "email", "tel", "url", "date", "textarea", "select"
     };
 
     public static FormFillProposal Prepare(JobOpportunity job, EmployerFormSnapshot form)
@@ -80,6 +81,13 @@ public static class EmployerFormFillPlanner
                  answerUrl.Scheme != Uri.UriSchemeHttps || !string.IsNullOrEmpty(answerUrl.UserInfo)))
             {
                 reasons.Add($"Reviewed answer for '{field.Label}' must be an HTTPS URL without credentials.");
+                continue;
+            }
+            if (field.Type.Equals("date", StringComparison.OrdinalIgnoreCase) &&
+                !DateOnly.TryParseExact(answer.Answer, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out _))
+            {
+                reasons.Add($"Reviewed answer for '{field.Label}' must be a valid YYYY-MM-DD date.");
                 continue;
             }
             if (field.Type.Equals("select", StringComparison.OrdinalIgnoreCase) &&

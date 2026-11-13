@@ -43,7 +43,7 @@ public static class EmployerFormFillBookmarklet
           });
           if (JSON.stringify(fields) !== JSON.stringify(packet.fields))
             return fail('The live form changed since it was reviewed.');
-          const allowed = new Set(['text', 'email', 'tel', 'url', 'textarea', 'select']);
+          const allowed = new Set(['text', 'email', 'tel', 'url', 'date', 'textarea', 'select']);
           const seen = new Set();
           const actions = [];
           for (const value of packet.values) {
@@ -60,6 +60,13 @@ public static class EmployerFormFillBookmarklet
               catch { return fail('A proposed URL is invalid.'); }
               if (address.protocol !== 'https:' || address.username || address.password)
                 return fail('A proposed URL must use HTTPS without credentials.');
+            }
+            if (fields[index].type === 'date') {
+              const date = value.value;
+              const parsed = new Date(date + 'T00:00:00Z');
+              if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(parsed.getTime()) ||
+                  parsed.toISOString().slice(0, 10) !== date)
+                return fail('A proposed date must be a valid YYYY-MM-DD date.');
             }
             let nextValue = value.value;
             if (fields[index].type === 'select') {

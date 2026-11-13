@@ -118,6 +118,26 @@ public sealed class EmployerFormFillPlannerTests
         else Assert.Empty(plan.Values);
     }
 
+    [Theory]
+    [InlineData("2026-12-01", true)]
+    [InlineData("2026-02-30", false)]
+    [InlineData("12/01/2026", false)]
+    public void Reviewed_start_date_uses_valid_iso_date(string answer, bool expected)
+    {
+        var job = Job();
+        job.FormPlan!.Answers.Add(new ApplicationFormAnswer
+        {
+            FieldLabel = "Start date",
+            Answer = answer,
+            Source = "Reviewed synthetic availability"
+        });
+        var plan = EmployerFormFillPlanner.Prepare(job, new EmployerFormSnapshot(
+            new Uri("https://example.test/apply"), [new EmployerFormField("start", "Start date", "date", true)]));
+        Assert.Equal(expected, plan.IsComplete);
+        if (expected) Assert.Equal(answer, Assert.Single(plan.Values).Value);
+        else Assert.Empty(plan.Values);
+    }
+
     [Fact]
     public void Repeated_visible_label_blocks_ambiguous_fill()
     {
