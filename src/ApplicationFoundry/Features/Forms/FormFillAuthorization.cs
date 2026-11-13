@@ -51,6 +51,7 @@ public static class FormFillAuthorizer
             Mode = job.FormPlan!.Mode,
             job.FormPlan.Rules,
             FormUrl = form.Url.AbsoluteUri,
+            ConfirmedExternalUrl = form.ConfirmedExternalUrl?.AbsoluteUri,
             form.Fields,
             proposal.Values
         });

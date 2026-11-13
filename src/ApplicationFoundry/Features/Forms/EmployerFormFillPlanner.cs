@@ -4,7 +4,7 @@ using System.Globalization;
 namespace ApplicationFoundry.Features.Forms;
 
 public sealed record EmployerFormField(string Key, string Label, string Type, bool Required, IReadOnlyList<string>? Options = null);
-public sealed record EmployerFormSnapshot(Uri Url, IReadOnlyList<EmployerFormField> Fields);
+public sealed record EmployerFormSnapshot(Uri Url, IReadOnlyList<EmployerFormField> Fields, Uri? ConfirmedExternalUrl = null);
 public sealed record ProposedFieldValue(string Key, string Label, string Value);
 public sealed record FormFillProposal(bool IsComplete, IReadOnlyList<ProposedFieldValue> Values, IReadOnlyList<string> Reasons);
 
@@ -23,11 +23,16 @@ public static class EmployerFormFillPlanner
             reasons.Add("Prepare and review answers before filling an employer form.");
         if (job.Status is OpportunityStatus.Submitted or OpportunityStatus.Interviewing or OpportunityStatus.Closed)
             reasons.Add("This opportunity is no longer in a pre-submission state.");
-        if (!Uri.TryCreate(job.SourceUrl, UriKind.Absolute, out var postingUrl) ||
-            postingUrl.Scheme != Uri.UriSchemeHttps || form.Url.Scheme != Uri.UriSchemeHttps ||
-            !string.Equals(postingUrl.IdnHost, form.Url.IdnHost, StringComparison.OrdinalIgnoreCase) ||
-            postingUrl.Port != form.Url.Port)
-            reasons.Add("The form must use the same HTTPS origin as the saved posting.");
+        var safeFormUrl = form.Url.Scheme == Uri.UriSchemeHttps && form.Url.UserInfo.Length == 0;
+        var sameOrigin = Uri.TryCreate(job.SourceUrl, UriKind.Absolute, out var postingUrl) &&
+            postingUrl.Scheme == Uri.UriSchemeHttps &&
+            string.Equals(postingUrl.IdnHost, form.Url.IdnHost, StringComparison.OrdinalIgnoreCase) &&
+            postingUrl.Port == form.Url.Port;
+        var confirmedExternal = form.ConfirmedExternalUrl is { UserInfo: { Length: 0 } } confirmed &&
+            confirmed.Scheme == Uri.UriSchemeHttps &&
+            string.Equals(confirmed.AbsoluteUri, form.Url.AbsoluteUri, StringComparison.Ordinal);
+        if (!safeFormUrl || (!sameOrigin && !confirmedExternal))
+            reasons.Add("The form must use the same HTTPS origin as the saved posting, or the applicant must confirm this exact external HTTPS form URL.");
         if (form.Fields.Count is < 1 or > 100)
             reasons.Add("The form must contain between 1 and 100 fields.");
 

@@ -45,6 +45,27 @@ public sealed class FormFillAuthorizerTests
         Assert.False(FormFillAuthorizer.IsCurrent(job, form, authorization));
     }
 
+    [Fact]
+    public void External_form_requires_exact_applicant_confirmed_url_and_reauthorization_after_change()
+    {
+        var job = Job();
+        var externalUrl = new Uri("https://apply.example.test/form?job=42");
+        var form = Form() with { Url = externalUrl };
+        Assert.Null(FormFillAuthorizer.Authorize(job, form));
+
+        var confirmed = form with { ConfirmedExternalUrl = externalUrl };
+        var authorization = FormFillAuthorizer.Authorize(job, confirmed);
+        Assert.NotNull(authorization);
+        Assert.NotNull(BrowserFormFillPacketBuilder.Create(job, confirmed, authorization));
+        Assert.False(FormFillAuthorizer.IsCurrent(job, form, authorization));
+        Assert.False(FormFillAuthorizer.IsCurrent(job,
+            confirmed with { ConfirmedExternalUrl = new Uri("https://apply.example.test/form?job=other") }, authorization));
+        Assert.Null(FormFillAuthorizer.Authorize(job,
+            form with { ConfirmedExternalUrl = new Uri("http://apply.example.test/form?job=42") }));
+        Assert.Null(FormFillAuthorizer.Authorize(job,
+            form with { ConfirmedExternalUrl = new Uri("https://user:secret@apply.example.test/form?job=42") }));
+    }
+
     private static JobOpportunity Job() => new()
     {
         Id = 42,

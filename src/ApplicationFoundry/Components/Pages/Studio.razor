@@ -424,6 +424,9 @@
                 <a class="bookmarklet" href="@EmployerFormSnapshotBookmarklet.Href">Copy form structure</a>
                 <details><summary>Form snapshot format</summary><pre>{"url":"https://example.test/apply","fields":[{"key":"email","label":"Email","type":"email","required":true}]}</pre></details>
                 <label>Form snapshot JSON<textarea class="form-control" rows="4" maxlength="65536" @bind="formDrafts[job.Id].SnapshotJson" @bind:event="oninput"></textarea></label>
+                <p class="mt-2">Saved posting: <a href="@job.SourceUrl" target="_blank" rel="noopener noreferrer">@job.SourceUrl</a>. If its application form opens on another site, verify that destination yourself before allowing a fill.</p>
+                <label>Confirmed external form URL (only for a different site)<input class="form-control" type="url" maxlength="2048" @bind="formDrafts[job.Id].ConfirmedExternalFormUrl" @bind:event="oninput" /></label>
+                <label><input type="checkbox" @bind="formDrafts[job.Id].ConfirmExternalForm" /> I checked that this exact external URL is the application form for this saved job.</label>
                 <button class="btn btn-sm btn-outline-secondary mt-2" type="button" @onclick="() => PreviewFormMatch(job.Id)">Preview reviewed answers</button>
                 @if (formDrafts[job.Id].FormPreview is { } preview)
                 {
@@ -626,7 +629,9 @@
         {
             Mode = job.FormPlan?.Mode ?? FormSubmissionMode.SubmitPersonally,
             Rules = job.FormPlan?.Rules ?? "",
-            SnapshotJson = previousDrafts.TryGetValue(job.Id, out var previous) ? previous.SnapshotJson : ""
+            SnapshotJson = previousDrafts.TryGetValue(job.Id, out var previous) ? previous.SnapshotJson : "",
+            ConfirmedExternalFormUrl = previousDrafts.TryGetValue(job.Id, out previous) ? previous.ConfirmedExternalFormUrl : "",
+            ConfirmExternalForm = previousDrafts.TryGetValue(job.Id, out previous) && previous.ConfirmExternalForm
         });
         ruleResults.Clear();
         followUpDrafts = jobs.ToDictionary(job => job.Id, job => new FollowUpDraft
@@ -1378,13 +1383,31 @@
         await ReloadAsync();
     }
 
+    private static bool TryParseFormSnapshot(FormPlanDraft draft, out EmployerFormSnapshot? snapshot, out string error)
+    {
+        if (!EmployerFormSnapshotCodec.TryParse(draft.SnapshotJson, out snapshot, out error))
+            return false;
+        if (!draft.ConfirmExternalForm)
+            return true;
+        if (!Uri.TryCreate(draft.ConfirmedExternalFormUrl, UriKind.Absolute, out var confirmed) ||
+            confirmed.Scheme != Uri.UriSchemeHttps || confirmed.UserInfo.Length > 0 ||
+            !string.Equals(confirmed.AbsoluteUri, snapshot!.Url.AbsoluteUri, StringComparison.Ordinal))
+        {
+            error = "The confirmed external URL must exactly match the HTTPS form URL in the snapshot.";
+            snapshot = null;
+            return false;
+        }
+        snapshot = snapshot! with { ConfirmedExternalUrl = confirmed };
+        return true;
+    }
+
     private void PreviewFormMatch(int jobId)
     {
         var draft = formDrafts[jobId];
         draft.FormPreview = null;
         draft.PreviewFingerprint = "";
         draft.FormAuthorization = null;
-        if (!EmployerFormSnapshotCodec.TryParse(draft.SnapshotJson, out var snapshot, out var error))
+        if (!TryParseFormSnapshot(draft, out var snapshot, out var error))
         {
             message = error;
             return;
@@ -1402,7 +1425,7 @@
         var draft = formDrafts[jobId];
         draft.FormAuthorization = null;
         if (draft.FormPreview?.IsComplete != true || draft.PreviewFingerprint.Length == 0 ||
-            !EmployerFormSnapshotCodec.TryParse(draft.SnapshotJson, out var snapshot, out _))
+            !TryParseFormSnapshot(draft, out var snapshot, out _))
         {
             message = "Preview this form and its proposed values again before authorizing.";
             return;
@@ -1423,14 +1446,14 @@
     private bool IsFormMatchAuthorized(JobOpportunity job)
     {
         var draft = formDrafts[job.Id];
-        return EmployerFormSnapshotCodec.TryParse(draft.SnapshotJson, out var snapshot, out _) &&
+        return TryParseFormSnapshot(draft, out var snapshot, out _) &&
             FormFillAuthorizer.IsCurrent(job, snapshot!, draft.FormAuthorization);
     }
 
     private async Task CopyApprovedFillPacketAsync(int jobId)
     {
         var draft = formDrafts[jobId];
-        if (!EmployerFormSnapshotCodec.TryParse(draft.SnapshotJson, out var snapshot, out _))
+        if (!TryParseFormSnapshot(draft, out var snapshot, out _))
         {
             draft.FormAuthorization = null;
             message = "The form snapshot changed. Preview and authorize it again.";
@@ -1476,7 +1499,7 @@
         draft.ReceiptPreviewValues = null;
         draft.ReceiptPreviewJson = "";
         draft.ConfirmObservedEntries = false;
-        if (!EmployerFormSnapshotCodec.TryParse(draft.SnapshotJson, out var snapshot, out _))
+        if (!TryParseFormSnapshot(draft, out var snapshot, out _))
         {
             message = "Preview and authorize the current employer form before reviewing its receipt.";
             return;
@@ -1500,7 +1523,7 @@
         var draft = formDrafts[jobId];
         if (draft.ReceiptPreviewValues is not { Count: > 0 } ||
             draft.BrowserReceiptJson != draft.ReceiptPreviewJson ||
-            !EmployerFormSnapshotCodec.TryParse(draft.SnapshotJson, out var snapshot, out _))
+            !TryParseFormSnapshot(draft, out var snapshot, out _))
         {
             message = "The receipt changed. Review it again before recording.";
             return;
@@ -1524,6 +1547,8 @@
         public string EntryValue { get; set; } = "";
         public bool ConfirmSentEntries { get; set; }
         public string SnapshotJson { get; set; } = "";
+        public string ConfirmedExternalFormUrl { get; set; } = "";
+        public bool ConfirmExternalForm { get; set; }
         public FormFillProposal? FormPreview { get; set; }
         public string PreviewFingerprint { get; set; } = "";
         public FormFillAuthorization? FormAuthorization { get; set; }
