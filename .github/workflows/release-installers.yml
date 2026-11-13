@@ -43,27 +43,6 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
-      - run: dotnet publish $env:PROJECT -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:Version=$env:APP_VERSION -o publish
-      - run: choco install innosetup --no-progress -y
-      - shell: pwsh
-        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVersion=$env:APP_VERSION" packaging\windows\ApplicationFoundry.iss'
-      - uses: actions/upload-artifact@v7
-        with:
-          name: application-foundry-windows
-          path: artifacts/*.exe
-          if-no-files-found: error
-
-  windows-desktop-prototype:
-    if: github.event_name != 'push'
-    needs: test
-    runs-on: windows-latest
-    env:
-      APP_VERSION: ${{ needs.test.outputs.app_version }}
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 10.0.x
       - run: dotnet publish src/ApplicationFoundry.Desktop/ApplicationFoundry.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:Version=$env:APP_VERSION -o publish-desktop
       - shell: pwsh
         run: |
@@ -77,13 +56,13 @@ jobs:
         run: ./tests/packaging/assert-windows-gui-subsystem.ps1 publish-desktop/ApplicationFoundry.Desktop.exe
       - run: choco install innosetup --no-progress -y
       - shell: pwsh
-        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVersion=$env:APP_VERSION" packaging\windows\ApplicationFoundry.Desktop.iss'
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVersion=$env:APP_VERSION" packaging\windows\ApplicationFoundry.iss'
       - shell: pwsh
-        run: ./tests/packaging/assert-windows-gui-subsystem.ps1 (Get-ChildItem artifacts/*-windows-desktop-prototype-setup.exe).FullName
+        run: ./tests/packaging/assert-windows-gui-subsystem.ps1 (Get-ChildItem artifacts/*-windows-x64-setup.exe).FullName
       - uses: actions/upload-artifact@v7
         with:
-          name: application-foundry-windows-desktop-prototype
-          path: artifacts/*-windows-desktop-prototype-setup.exe
+          name: application-foundry-windows
+          path: artifacts/*.exe
           if-no-files-found: error
 
   macos:

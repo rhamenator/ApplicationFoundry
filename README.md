@@ -40,18 +40,14 @@ data directory, or configure `ConnectionStrings__DefaultConnection` to use a
 different SQLite connection string. Back up `app.db` before upgrading an
 existing installation.
 
-For a Windows desktop trial, download the **Application Foundry Desktop
-Prototype** installer from the draft pull request's build artifacts. It installs
-for the current user without administrator rights. Its Start menu shortcut opens
-a desktop window without a server console. The separately named **Application
-Foundry** installer is the older local-server build; its shortcut opens a browser
-and keeps a console window running. Choose the Desktop Prototype for a desktop
-trial. In the pull request, open the latest **Release installers** check, download
-the `application-foundry-windows-desktop-prototype` artifact, extract its ZIP,
-and run the setup executable. Neither build is a stable release yet.
+For a Windows desktop trial, open the latest **Release installers** check on the
+draft pull request, download the `application-foundry-windows` artifact, extract
+its ZIP, and run the setup executable. It installs for the current user without
+administrator rights. Its Start menu shortcut opens the desktop window without
+a server console. This installer remains a draft until the release gates pass.
 
 Approved desktop drafts can be saved with a Windows file
-dialog as DOCX or PDF. The desktop prototype can help with an employer form:
+dialog as DOCX or PDF. The desktop app can help with an employer form:
 the applicant captures its field structure in a browser, reviews prepared
 answers in the app, explicitly authorizes a fill attempt, and inspects the
 entered values before recording them. The browser helper never submits the
