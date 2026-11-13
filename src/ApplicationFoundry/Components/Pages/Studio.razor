@@ -244,6 +244,9 @@
 <section class="studio-panel">
     <h2>Find matching jobs</h2>
     <p>Compare current postings with your saved evidence on this computer. Your profile is not sent to the job board.</p>
+    <label>Employer board or posting URL (optional)<input class="form-control" type="url" @bind="employerBoardUrl" placeholder="https://boards.greenhouse.io/example or https://jobs.lever.co/example" /></label>
+    <button class="btn btn-sm btn-outline-secondary mt-2" type="button" @onclick="UseEmployerBoardUrl">Use this board</button>
+    <p class="text-secondary">Paste a Greenhouse or Lever link to fill in its source, site token, and region. Check the employer name before searching.</p>
     <label>Job source
         <select class="form-select" @bind="searchSource">
             <option value="remoteok">Remote OK (remote roles)</option>
@@ -545,6 +548,7 @@
     private IReadOnlyList<DiscoveredJob> discoveredJobs = [];
     private bool isSearching;
     private string searchSource = "remoteok";
+    private string employerBoardUrl = "";
     private string searchKeywords = "";
     private int minimumSearchFitPercent;
     private string greenhouseEmployer = "";
@@ -567,6 +571,29 @@
     }
     private string userId = "";
     private string message = "";
+
+    private void UseEmployerBoardUrl()
+    {
+        if (!EmployerBoardUrlParser.TryParse(employerBoardUrl, out var board) || board is null)
+        {
+            message = "Enter an HTTPS boards.greenhouse.io or jobs.lever.co board or posting URL.";
+            return;
+        }
+
+        searchSource = board.Source;
+        if (board.Source == "greenhouse")
+        {
+            greenhouseBoardToken = board.Token;
+            greenhouseEmployer = board.Token;
+        }
+        else
+        {
+            leverSiteToken = board.Token;
+            leverEmployer = board.Token;
+            leverRegion = board.Region;
+        }
+        message = "Board details filled in. Check the employer name, then search.";
+    }
 
     protected override async Task OnInitializedAsync()
     {
