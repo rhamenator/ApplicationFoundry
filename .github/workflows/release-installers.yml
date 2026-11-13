@@ -59,6 +59,8 @@ jobs:
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVersion=$env:APP_VERSION" packaging\windows\ApplicationFoundry.iss'
       - shell: pwsh
         run: ./tests/packaging/assert-windows-gui-subsystem.ps1 (Get-ChildItem artifacts/*-windows-x64-setup.exe).FullName
+      - shell: pwsh
+        run: ./tests/packaging/smoke-windows-install.ps1 (Get-ChildItem artifacts/*-windows-x64-setup.exe).FullName
       - uses: actions/upload-artifact@v7
         with:
           name: application-foundry-windows
