@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using ApplicationFoundry.Components.Pages;
 using ApplicationFoundry.Data;
+using ApplicationFoundry.Features;
 using ApplicationFoundry.Features.Documents;
 using ApplicationFoundry.Features.Fit;
 using ApplicationFoundry.Features.Jobs;
@@ -56,10 +57,7 @@ internal static class Program
             options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
         }).AddEntityFrameworkStores<ApplicationDbContext>();
         services.AddSingleton<IFitScorer, ManagedFitScorer>();
-        services.AddHttpClient<IJobDiscoveryService, RemoteJobDiscoveryService>();
-        services.AddHttpClient<GreenhouseJobDiscoveryService>();
-        services.AddSingleton<ICareerDocumentService, CareerDocumentService>();
-        services.AddSingleton<ICandidateDocumentImportService, CandidateDocumentImportService>();
+        services.AddCareerFeatures();
         var desktopExport = new DesktopDocumentExport();
         services.AddSingleton<IClientDocumentExport>(desktopExport);
 

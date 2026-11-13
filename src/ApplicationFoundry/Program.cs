@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using ApplicationFoundry.Components;
 using ApplicationFoundry.Components.Account;
 using ApplicationFoundry.Data;
+using ApplicationFoundry.Features;
 using ApplicationFoundry.Features.Documents;
 using ApplicationFoundry.Features.Fit;
 using ApplicationFoundry.Features.Jobs;
@@ -74,14 +75,7 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
 
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 builder.Services.AddSingleton<IFitScorer, OnnxFitScorer>();
-builder.Services.AddHttpClient<IJobDiscoveryService, RemoteJobDiscoveryService>();
-builder.Services.AddHttpClient<GreenhouseJobDiscoveryService>();
-builder.Services.AddHttpClient<LeverJobDiscoveryService>();
-builder.Services.AddSingleton<ICareerDocumentService, CareerDocumentService>();
-builder.Services.AddSingleton<ICandidateDocumentImportService, CandidateDocumentImportService>();
-builder.Services.AddSingleton<LegacyAccessCsvPreviewService>();
-builder.Services.AddSingleton<LegacyEvidenceImportService>();
-builder.Services.AddSingleton<LegacyProfileImportService>();
+builder.Services.AddCareerFeatures();
 builder.Services.AddSingleton<IClientDocumentExport, BrowserDocumentExport>();
 builder.Services.AddHealthChecks();
 
