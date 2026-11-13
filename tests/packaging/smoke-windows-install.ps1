@@ -13,6 +13,9 @@ $app = Join-Path $installPath 'ApplicationFoundry.Desktop.exe'
 if (-not (Test-Path $app)) {
     throw "The installed desktop executable is missing."
 }
+if (Test-Path (Join-Path $installPath 'ApplicationFoundry.exe')) {
+    throw 'The legacy console/server executable was included in the desktop installer.'
+}
 & "$PSScriptRoot/assert-windows-gui-subsystem.ps1" $app
 
 $errorPath = Join-Path $env:RUNNER_TEMP 'application-foundry-installed-self-test.stderr'
