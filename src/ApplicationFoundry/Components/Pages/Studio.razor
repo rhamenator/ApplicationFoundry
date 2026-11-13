@@ -170,8 +170,12 @@
                     <label>@draft.Column
                         <select class="form-select" @bind="draft.Target" @bind:after="ClearLegacyMappingPreview">
                             <option value="">Ignore</option>
+                            <option value="title">Title</option>
                             <option value="first-name">First name</option>
+                            <option value="middle-initials">Middle initials</option>
                             <option value="last-name">Last name</option>
+                            <option value="suffix">Suffix</option>
+                            <option value="preferred-display-name">Preferred display name</option>
                             <option value="email">Email</option>
                             <option value="phone">Phone</option>
                             <option value="summary">Professional summary</option>

@@ -81,11 +81,12 @@ public sealed class LegacyProfileImportService(IDbContextFactory<ApplicationDbCo
     }
 
     private static readonly HashSet<string> AllowedFields =
-        ["first-name", "last-name", "email", "phone", "summary"];
+        ["title", "first-name", "middle-initials", "last-name", "suffix",
+            "preferred-display-name", "email", "phone", "summary"];
 
     private static void ValidatePlan(string userId, LegacyProfileImportPlan plan)
     {
-        if (string.IsNullOrWhiteSpace(userId) || plan.Fields.Count is < 1 or > 5
+        if (string.IsNullOrWhiteSpace(userId) || plan.Fields.Count is < 1 or > 9
             || plan.FileName.Length is < 1 or > 200
             || Path.GetFileName(plan.FileName.Replace('\\', '/')) != plan.FileName
             || plan.SourceSha256.Length != 64 || !plan.SourceSha256.All(Uri.IsHexDigit))
@@ -94,7 +95,10 @@ public sealed class LegacyProfileImportService(IDbContextFactory<ApplicationDbCo
         {
             var limit = key switch
             {
+                "title" or "suffix" => 32,
                 "first-name" or "last-name" => 80,
+                "middle-initials" => 40,
+                "preferred-display-name" => 160,
                 "email" => 256,
                 "phone" => 64,
                 "summary" => 4000,
@@ -108,8 +112,12 @@ public sealed class LegacyProfileImportService(IDbContextFactory<ApplicationDbCo
 
     private static string GetField(CandidateProfile profile, string key) => key switch
     {
+        "title" => profile.Title,
         "first-name" => profile.FirstName,
+        "middle-initials" => profile.MiddleInitials,
         "last-name" => profile.LastName,
+        "suffix" => profile.Suffix,
+        "preferred-display-name" => profile.PreferredDisplayName,
         "email" => profile.Email,
         "phone" => profile.Phone,
         "summary" => profile.Summary,
@@ -120,8 +128,12 @@ public sealed class LegacyProfileImportService(IDbContextFactory<ApplicationDbCo
     {
         switch (key)
         {
+            case "title": profile.Title = value; break;
             case "first-name": profile.FirstName = value; break;
+            case "middle-initials": profile.MiddleInitials = value; break;
             case "last-name": profile.LastName = value; break;
+            case "suffix": profile.Suffix = value; break;
+            case "preferred-display-name": profile.PreferredDisplayName = value; break;
             case "email": profile.Email = value; break;
             case "phone": profile.Phone = value; break;
             case "summary": profile.Summary = value; break;

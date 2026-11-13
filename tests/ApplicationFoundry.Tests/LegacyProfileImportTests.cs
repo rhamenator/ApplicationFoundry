@@ -27,8 +27,12 @@ public sealed class LegacyProfileImportTests
                 db.CandidateProfiles.Add(new CandidateProfile
                 {
                     UserId = "synthetic-applicant",
+                    Title = "Dr.",
                     FirstName = "Jordan",
+                    MiddleInitials = "Q.",
                     LastName = "Example",
+                    Suffix = "Jr.",
+                    PreferredDisplayName = "J. Example",
                     Email = "old@example.test",
                     Summary = "Existing synthetic summary"
                 });
@@ -38,8 +42,9 @@ public sealed class LegacyProfileImportTests
 
             var previewer = new LegacyAccessCsvPreviewService();
             var preview = previewer.Preview("profile.csv",
-                "Given,Email\nAvery,new@example.test"u8.ToArray());
-            var plan = previewer.PrepareProfileImport(preview, ["first-name", "email"]);
+                "Title,Given,Middle,Family,Suffix,Display,Email\nMx.,Avery,R.,Rivera,III,Avery Rivera,new@example.test"u8.ToArray());
+            var plan = previewer.PrepareProfileImport(preview,
+                ["title", "first-name", "middle-initials", "last-name", "suffix", "preferred-display-name", "email"]);
             var importer = new LegacyProfileImportService(factory);
             var batch = await importer.ImportAsync("synthetic-applicant", plan);
 
@@ -47,6 +52,11 @@ public sealed class LegacyProfileImportTests
             {
                 var profile = await db.CandidateProfiles.SingleAsync();
                 Assert.Equal("Avery", profile.FirstName);
+                Assert.Equal("Mx.", profile.Title);
+                Assert.Equal("R.", profile.MiddleInitials);
+                Assert.Equal("Rivera", profile.LastName);
+                Assert.Equal("III", profile.Suffix);
+                Assert.Equal("Avery Rivera", profile.PreferredDisplayName);
                 Assert.Equal("new@example.test", profile.Email);
                 Assert.Equal("Existing synthetic summary", profile.Summary);
                 Assert.Equal(preview.SourceSha256,
@@ -69,12 +79,17 @@ public sealed class LegacyProfileImportTests
                 profile.FirstName = "Avery";
                 await db.SaveChangesAsync();
             }
-            Assert.Equal(2, await importer.UndoAsync("synthetic-applicant", batch.Id));
+            Assert.Equal(7, await importer.UndoAsync("synthetic-applicant", batch.Id));
 
             await using (var db = await factory.CreateDbContextAsync())
             {
                 var profile = await db.CandidateProfiles.SingleAsync();
                 Assert.Equal("Jordan", profile.FirstName);
+                Assert.Equal("Dr.", profile.Title);
+                Assert.Equal("Q.", profile.MiddleInitials);
+                Assert.Equal("Example", profile.LastName);
+                Assert.Equal("Jr.", profile.Suffix);
+                Assert.Equal("J. Example", profile.PreferredDisplayName);
                 Assert.Equal("old@example.test", profile.Email);
                 Assert.Equal("Updated unrelated summary", profile.Summary);
                 Assert.Empty(await db.LegacyProfileImportBatches.ToListAsync());

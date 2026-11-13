@@ -33,7 +33,8 @@ public sealed class LegacyAccessCsvPreviewService
     private const int MaxColumns = 40;
     private const int MaxRows = 5000;
     private static readonly HashSet<string> AllowedTargets =
-        ["first-name", "last-name", "email", "phone", "summary", "evidence-claim"];
+        ["title", "first-name", "middle-initials", "last-name", "suffix",
+            "preferred-display-name", "email", "phone", "summary", "evidence-claim"];
 
     public LegacyAccessCsvPreview Preview(string fileName, byte[] bytes, string encodingName = Utf8EncodingName)
     {
@@ -131,7 +132,10 @@ public sealed class LegacyAccessCsvPreviewService
             if (value.Length == 0) continue;
             var limit = target switch
             {
+                "title" or "suffix" => 32,
                 "first-name" or "last-name" => 80,
+                "middle-initials" => 40,
+                "preferred-display-name" => 160,
                 "email" => 256,
                 "phone" => 64,
                 "summary" => 4000,
