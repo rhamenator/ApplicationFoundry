@@ -17,16 +17,24 @@ namespace ApplicationFoundry.Desktop;
 internal static class Program
 {
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
+        var selfTest = args.Contains("--self-test", StringComparer.OrdinalIgnoreCase);
         try
         {
-            Run();
+            if (selfTest) RunSelfTest();
+            else Run();
         }
         catch (Exception exception)
         {
-            MessageBox.Show(exception.ToString(), "Application Foundry startup error",
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
+            if (selfTest)
+            {
+                Console.Error.WriteLine(exception);
+                Environment.ExitCode = 1;
+            }
+            else
+                MessageBox.Show(exception.ToString(), "Application Foundry startup error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
@@ -44,6 +52,37 @@ internal static class Program
             Cache = SqliteCacheMode.Shared
         }.ToString();
 
+        var desktopExport = new DesktopDocumentExport();
+        using var provider = CreateProvider(connectionString, desktopExport);
+        using (var scope = provider.CreateScope())
+            scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Database.Migrate();
+
+        Application.Run(new DesktopWindow(provider, desktopExport));
+    }
+
+    private static void RunSelfTest()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"application-foundry-startup-{Guid.NewGuid():N}.db");
+        try
+        {
+            var connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath }.ToString();
+            using var provider = CreateProvider(connectionString, new DesktopDocumentExport());
+            using var scope = provider.CreateScope();
+            scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Database.Migrate();
+            scope.ServiceProvider.GetRequiredService<IJobDiscoveryService>();
+            scope.ServiceProvider.GetRequiredService<GreenhouseJobDiscoveryService>();
+            scope.ServiceProvider.GetRequiredService<LeverJobDiscoveryService>();
+            scope.ServiceProvider.GetRequiredService<ICareerDocumentService>();
+            scope.ServiceProvider.GetRequiredService<ICandidateDocumentImportService>();
+            scope.ServiceProvider.GetRequiredService<LegacyAccessCsvPreviewService>();
+            scope.ServiceProvider.GetRequiredService<LegacyEvidenceImportService>();
+            scope.ServiceProvider.GetRequiredService<LegacyProfileImportService>();
+        }
+        finally { File.Delete(databasePath); }
+    }
+
+    private static ServiceProvider CreateProvider(string connectionString, DesktopDocumentExport desktopExport)
+    {
         var services = new ServiceCollection();
         services.AddWindowsFormsBlazorWebView();
         services.AddLogging();
@@ -58,14 +97,8 @@ internal static class Program
         }).AddEntityFrameworkStores<ApplicationDbContext>();
         services.AddSingleton<IFitScorer, ManagedFitScorer>();
         services.AddCareerFeatures();
-        var desktopExport = new DesktopDocumentExport();
         services.AddSingleton<IClientDocumentExport>(desktopExport);
-
-        using var provider = services.BuildServiceProvider();
-        using (var scope = provider.CreateScope())
-            scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Database.Migrate();
-
-        Application.Run(new DesktopWindow(provider, desktopExport));
+        return services.BuildServiceProvider();
     }
 }
 
