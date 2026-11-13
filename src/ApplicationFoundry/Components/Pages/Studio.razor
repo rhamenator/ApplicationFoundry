@@ -8,6 +8,7 @@
 @inject IClientDocumentExport ClientExport
 @inject IJobDiscoveryService JobDiscovery
 @inject GreenhouseJobDiscoveryService GreenhouseDiscovery
+@inject LeverJobDiscoveryService LeverDiscovery
 @inject IJSRuntime JS
 
 <PageTitle>Career studio</PageTitle>
@@ -139,6 +140,7 @@
         <select class="form-select" @bind="searchSource">
             <option value="remoteok">Remote OK (remote roles)</option>
             <option value="greenhouse">Greenhouse employer board</option>
+            <option value="lever">Lever employer site</option>
         </select>
     </label>
     @if (searchSource == "greenhouse")
@@ -149,6 +151,21 @@
             <label>Location contains (optional)<input class="form-control" @bind="searchLocation" /></label>
         </div>
         <p class="text-secondary">Use the final segment of the employer's Greenhouse board URL as its token. The employer name and token identify the board; your profile and filters stay local.</p>
+    }
+    @if (searchSource == "lever")
+    {
+        <div class="profile-grid">
+            <label>Employer name<input class="form-control" @bind="leverEmployer" /></label>
+            <label>Lever site token<input class="form-control" @bind="leverSiteToken" /></label>
+            <label>Site region
+                <select class="form-select" @bind="leverRegion">
+                    <option value="global">Global</option>
+                    <option value="eu">EU</option>
+                </select>
+            </label>
+            <label>Location contains (optional)<input class="form-control" @bind="searchLocation" /></label>
+        </div>
+        <p class="text-secondary">Use the employer's Lever site name from its jobs.lever.co or jobs.eu.lever.co URL. Your profile and filters stay local.</p>
     }
     <div class="profile-grid">
         <label>Required keywords (comma separated)<input class="form-control" @bind="searchKeywords" /></label>
@@ -162,7 +179,7 @@
         </label>
     </div>
     <p class="text-secondary">All keywords must appear in the posting. Filters are applied on this computer.</p>
-    <button class="btn btn-primary" type="button" disabled="@(isSearching || profile.Id == 0 || profile.Evidence.Count == 0 || (searchSource == "greenhouse" && (string.IsNullOrWhiteSpace(greenhouseEmployer) || string.IsNullOrWhiteSpace(greenhouseBoardToken))))" @onclick="SearchJobsAsync">
+    <button class="btn btn-primary" type="button" disabled="@(isSearching || profile.Id == 0 || profile.Evidence.Count == 0 || (searchSource == "greenhouse" && (string.IsNullOrWhiteSpace(greenhouseEmployer) || string.IsNullOrWhiteSpace(greenhouseBoardToken))) || (searchSource == "lever" && (string.IsNullOrWhiteSpace(leverEmployer) || string.IsNullOrWhiteSpace(leverSiteToken))))" @onclick="SearchJobsAsync">
         @(isSearching ? "Searching…" : "Find matching jobs")
     </button>
     @if (profile.Id == 0 || profile.Evidence.Count == 0)
@@ -406,6 +423,9 @@
     private int minimumSearchFitPercent;
     private string greenhouseEmployer = "";
     private string greenhouseBoardToken = "";
+    private string leverEmployer = "";
+    private string leverSiteToken = "";
+    private string leverRegion = "global";
     private string searchLocation = "";
     private string userId = "";
     private string message = "";
@@ -600,9 +620,12 @@
         try
         {
             var filters = new JobSearchFilters(searchKeywords, minimumSearchFitPercent / 100f);
-            discoveredJobs = searchSource == "greenhouse"
-                ? await GreenhouseDiscovery.FindMatchesAsync(profile, greenhouseBoardToken, greenhouseEmployer, filters, searchLocation)
-                : await JobDiscovery.FindMatchesAsync(profile, filters);
+            discoveredJobs = searchSource switch
+            {
+                "greenhouse" => await GreenhouseDiscovery.FindMatchesAsync(profile, greenhouseBoardToken, greenhouseEmployer, filters, searchLocation),
+                "lever" => await LeverDiscovery.FindMatchesAsync(profile, leverSiteToken, leverEmployer, filters, searchLocation, leverRegion),
+                _ => await JobDiscovery.FindMatchesAsync(profile, filters)
+            };
             if (discoveredJobs.Count == 0) message = "No postings matched these filters right now. Try broader filters or import a posting below.";
         }
         catch (ArgumentException exception)
@@ -612,6 +635,10 @@
         catch (HttpRequestException exception) when (searchSource == "greenhouse" && exception.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
             message = "That Greenhouse board was not found. Check the token from the employer's board URL.";
+        }
+        catch (HttpRequestException exception) when (searchSource == "lever" && exception.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            message = "That Lever site was not found. Check its site token and region.";
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException or InvalidDataException)
         {
