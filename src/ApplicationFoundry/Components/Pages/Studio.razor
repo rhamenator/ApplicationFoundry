@@ -153,7 +153,40 @@
                     </tbody>
                 </table>
             </div>
-            <p class="text-secondary">Review the source table before mapping. Saving and reversible import are still being built.</p>
+            <h4>Map source columns</h4>
+            <p>Choose at most one source column for each destination field, then preview the mapped sample. No records are saved.</p>
+            <div class="profile-grid">
+                @foreach (var draft in legacyColumnDrafts)
+                {
+                    <label>@draft.Column
+                        <select class="form-select" @bind="draft.Target" @bind:after="ClearLegacyMappingPreview">
+                            <option value="">Ignore</option>
+                            <option value="first-name">First name</option>
+                            <option value="last-name">Last name</option>
+                            <option value="email">Email</option>
+                            <option value="phone">Phone</option>
+                            <option value="summary">Professional summary</option>
+                            <option value="evidence-claim">Evidence claim</option>
+                        </select>
+                    </label>
+                }
+            </div>
+            <button class="btn btn-outline-primary mt-2" type="button" @onclick="PreviewLegacyMapping">Preview mapping</button>
+            @if (legacyMappedPreview is not null)
+            {
+                <div class="table-responsive mt-3">
+                    <table class="table table-sm">
+                        <thead><tr>@foreach (var target in legacyMappedPreview.TargetFields) { <th>@target</th> }</tr></thead>
+                        <tbody>
+                            @foreach (var row in legacyMappedPreview.SampleRows)
+                            {
+                                <tr>@foreach (var target in legacyMappedPreview.TargetFields) { <td>@row[target]</td> }</tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            <p class="text-secondary">Saving and reversible import are still being built.</p>
         </div>
     }
 </section>
@@ -434,6 +467,8 @@
     private List<CandidateSourceDocument> sourceDocuments = [];
     private CandidateDocumentImport? pendingSource;
     private LegacyAccessCsvPreview? pendingLegacyCsv;
+    private LegacyAccessMappingPreview? legacyMappedPreview;
+    private List<LegacyColumnDraft> legacyColumnDrafts = [];
     private int mappingSourceId;
     private string mappingSourceName = "";
     private string mappingSourceHash = "";
@@ -520,6 +555,8 @@
     private async Task PreviewLegacyCsvAsync(InputFileChangeEventArgs eventArgs)
     {
         pendingLegacyCsv = null;
+        legacyMappedPreview = null;
+        legacyColumnDrafts = [];
         try
         {
             var file = eventArgs.File;
@@ -527,6 +564,7 @@
             using var buffer = new MemoryStream();
             await stream.CopyToAsync(buffer);
             pendingLegacyCsv = LegacyCsvPreviewer.Preview(file.Name, buffer.ToArray());
+            legacyColumnDrafts = pendingLegacyCsv.Columns.Select(column => new LegacyColumnDraft { Column = column }).ToList();
             message = "Review the table columns and sample records before mapping.";
         }
         catch (LegacyAccessCsvPreviewException exception)
@@ -541,6 +579,29 @@
         catch (Exception exception) when (exception is IOException or InvalidOperationException or ArgumentException)
         {
             message = "Choose a CSV up to 8 MB with at most 40 columns and 5,000 records.";
+        }
+    }
+
+    private void ClearLegacyMappingPreview() => legacyMappedPreview = null;
+
+    private void PreviewLegacyMapping()
+    {
+        if (pendingLegacyCsv is null) return;
+        try
+        {
+            legacyMappedPreview = LegacyCsvPreviewer.PreviewMapping(
+                pendingLegacyCsv, legacyColumnDrafts.Select(draft => draft.Target).ToArray());
+            message = "Review the mapped sample. No records have been imported.";
+        }
+        catch (LegacyAccessCsvPreviewException exception)
+        {
+            legacyMappedPreview = null;
+            message = exception.Code switch
+            {
+                "MAPPING_DUPLICATE" => "Choose each destination field only once.",
+                "MAPPING_EMPTY" => "Choose at least one destination field to preview.",
+                _ => "Check the column mapping and try again."
+            };
         }
     }
 
@@ -615,6 +676,12 @@
         suggestion.Added = true;
         message = "Reviewed evidence claim added.";
         await ReloadAsync();
+    }
+
+    private sealed class LegacyColumnDraft
+    {
+        public string Column { get; set; } = "";
+        public string Target { get; set; } = "";
     }
 
     private sealed class EvidenceSuggestionDraft

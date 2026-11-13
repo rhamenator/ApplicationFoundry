@@ -5,6 +5,9 @@ namespace ApplicationFoundry.Features.Documents;
 public sealed record LegacyAccessCsvPreview(
     string FileName, IReadOnlyList<string> Columns, IReadOnlyList<IReadOnlyList<string>> SampleRows, int RowCount);
 
+public sealed record LegacyAccessMappingPreview(
+    IReadOnlyList<string> TargetFields, IReadOnlyList<IReadOnlyDictionary<string, string>> SampleRows, int RowCount);
+
 public sealed class LegacyAccessCsvPreviewException(string code) : Exception(code)
 {
     public string Code { get; } = code;
@@ -15,6 +18,8 @@ public sealed class LegacyAccessCsvPreviewService
     public const int MaxFileBytes = 8 * 1024 * 1024;
     private const int MaxColumns = 40;
     private const int MaxRows = 5000;
+    private static readonly HashSet<string> AllowedTargets =
+        ["first-name", "last-name", "email", "phone", "summary", "evidence-claim"];
 
     public LegacyAccessCsvPreview Preview(string fileName, byte[] bytes)
     {
@@ -37,6 +42,26 @@ public sealed class LegacyAccessCsvPreviewService
         if (rows.Skip(1).Any(row => row.Count != columns.Length))
             throw new LegacyAccessCsvPreviewException("ROW_WIDTH");
         return new LegacyAccessCsvPreview(safeName, columns, rows.Skip(1).Take(5).ToArray(), rows.Count - 1);
+    }
+
+    public LegacyAccessMappingPreview PreviewMapping(LegacyAccessCsvPreview source, IReadOnlyList<string> targets)
+    {
+        if (targets.Count != source.Columns.Count || targets.Any(target => target.Length > 0 && !AllowedTargets.Contains(target)))
+            throw new LegacyAccessCsvPreviewException("MAPPING_TARGET");
+        var selected = targets.Where(target => target.Length > 0).ToArray();
+        if (selected.Distinct(StringComparer.Ordinal).Count() != selected.Length)
+            throw new LegacyAccessCsvPreviewException("MAPPING_DUPLICATE");
+        if (selected.Length == 0)
+            throw new LegacyAccessCsvPreviewException("MAPPING_EMPTY");
+
+        var samples = source.SampleRows.Select(row =>
+        {
+            var mapped = new Dictionary<string, string>(StringComparer.Ordinal);
+            for (var index = 0; index < targets.Count; index++)
+                if (targets[index].Length > 0) mapped.Add(targets[index], row[index]);
+            return (IReadOnlyDictionary<string, string>)mapped;
+        }).ToArray();
+        return new LegacyAccessMappingPreview(selected, samples, source.RowCount);
     }
 
     private static List<IReadOnlyList<string>> ParseRows(string text)

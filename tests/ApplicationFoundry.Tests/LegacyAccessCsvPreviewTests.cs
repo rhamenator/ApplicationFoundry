@@ -48,4 +48,32 @@ public sealed class LegacyAccessCsvPreviewTests
         Assert.Equal("Synthetic 1", preview.SampleRows[0][0]);
         Assert.Equal("Synthetic 5", preview.SampleRows[4][0]);
     }
+
+    [Fact]
+    public void ExplicitMappingPreviewsSelectedFieldsWithoutChangingSource()
+    {
+        var source = previewer.Preview("export.csv", "Given,Family,Contact\nJordan,Example,jordan@example.test"u8.ToArray());
+
+        var mapping = previewer.PreviewMapping(source, ["first-name", "last-name", "email"]);
+
+        Assert.Equal(["first-name", "last-name", "email"], mapping.TargetFields);
+        Assert.Equal("Jordan", mapping.SampleRows[0]["first-name"]);
+        Assert.Equal("Example", mapping.SampleRows[0]["last-name"]);
+        Assert.Equal("jordan@example.test", mapping.SampleRows[0]["email"]);
+        Assert.Equal("Given", source.Columns[0]);
+    }
+
+    [Fact]
+    public void RejectsDuplicateOrUnknownMappingTargets()
+    {
+        var source = previewer.Preview("export.csv", "A,B\nOne,Two"u8.ToArray());
+
+        var duplicate = Assert.Throws<LegacyAccessCsvPreviewException>(() =>
+            previewer.PreviewMapping(source, ["email", "email"]));
+        var unknown = Assert.Throws<LegacyAccessCsvPreviewException>(() =>
+            previewer.PreviewMapping(source, ["email", "unrecognized"]));
+
+        Assert.Equal("MAPPING_DUPLICATE", duplicate.Code);
+        Assert.Equal("MAPPING_TARGET", unknown.Code);
+    }
 }
