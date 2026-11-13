@@ -12,7 +12,11 @@ public static class EmployerFormSnapshotBookmarklet
               const type = el.tagName.toLowerCase() === 'input'
                 ? (el.type || 'text').toLowerCase()
                 : el.tagName.toLowerCase();
-              const label = (el.labels?.[0]?.textContent || el.getAttribute('aria-label') || '').trim();
+              const labelledBy = (el.getAttribute('aria-labelledby') || '').split(/\s+/)
+                .map(id => document.getElementById(id)?.textContent || '').join(' ').trim();
+              const label = [el.labels?.[0]?.textContent, el.getAttribute('aria-label'),
+                labelledBy, el.getAttribute('placeholder')]
+                .map(text => (text || '').trim()).find(Boolean) || '';
               const field = {
                 key: el.id || el.name || '',
                 label,

@@ -25,6 +25,9 @@ with tempfile.TemporaryDirectory(dir=repo) as directory:
         '<label for="email">Email *</label><input id="email" type="email" required value="SECRET-EMAIL">'
         '<label for="availability">Availability</label><select id="availability" required>'
         '<option value="">Choose</option><option value="soon">Two weeks</option></select>'
+        '<span id="portfolio-label">Portfolio URL</span><input id="portfolio" type="url" '
+        'aria-labelledby="portfolio-label" value="SECRET-PORTFOLIO">'
+        '<input id="phone" type="tel" placeholder="Phone" value="SECRET-PHONE">'
         '<input id="hidden" type="hidden" value="SECRET-HIDDEN">'
         '<input type="submit" value="Send">'
         '</form><output id="capture"></output><script>'
@@ -42,9 +45,11 @@ with tempfile.TemporaryDirectory(dir=repo) as directory:
     captured = re.search(r'<output id="capture">([^<]+)</output>', result.stdout)
     assert captured is not None, "Bookmarklet did not copy a snapshot"
     snapshot = json.loads(html.unescape(captured.group(1)))
-    assert [field["key"] for field in snapshot["fields"]] == ["email", "availability"]
+    assert [field["key"] for field in snapshot["fields"]] == ["email", "availability", "portfolio", "phone"]
     assert snapshot["fields"][0]["label"] == "Email *"
     assert snapshot["fields"][1]["options"] == ["Two weeks"]
+    assert snapshot["fields"][2]["label"] == "Portfolio URL"
+    assert snapshot["fields"][3]["label"] == "Phone"
     assert "SECRET-" not in json.dumps(snapshot), "Input values leaked into the snapshot"
 
 print("Synthetic Chromium capture passed: fields and choices copied without input values.")
