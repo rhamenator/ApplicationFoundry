@@ -51,7 +51,23 @@ public class JobDiscoveryTests
         Assert.Equal("C# Developer", results[0].RoleTitle);
     }
 
-    private sealed class FeedHandler : HttpMessageHandler
+    [Fact]
+    public async Task RejectsOversizedJobFeedBeforeParsing()
+    {
+        var service = new RemoteJobDiscoveryService(new HttpClient(new FeedHandler(oversized: true)), new TitleScorer());
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => service.FindMatchesAsync(new CandidateProfile()));
+    }
+
+    [Fact]
+    public async Task RejectsOversizedChunkedJobFeed()
+    {
+        var service = new RemoteJobDiscoveryService(new HttpClient(new FeedHandler(chunkedOversized: true)), new TitleScorer());
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => service.FindMatchesAsync(new CandidateProfile()));
+    }
+
+    private sealed class FeedHandler(bool oversized = false, bool chunkedOversized = false) : HttpMessageHandler
     {
         public string? RequestUri { get; private set; }
         public bool RequestHadBody { get; private set; }
@@ -69,11 +85,43 @@ public class JobDiscoveryTests
                   {"position":"Unsafe","company":"Example","url":"https://elsewhere.example/job","description":"<p>Ignore</p>"}
                 ]
                 """;
+            HttpContent content = chunkedOversized
+                ? new StreamContent(new SyntheticFeedStream(16 * 1024 * 1024 + 1))
+                : new StringContent(feed);
+            if (oversized) content.Headers.ContentLength = 16 * 1024 * 1024 + 1;
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent(feed)
+                Content = content
             });
         }
+    }
+
+    private sealed class SyntheticFeedStream(long remaining) : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var read = (int)Math.Min(remaining, count);
+            Array.Fill(buffer, (byte)' ', offset, read);
+            remaining -= read;
+            return read;
+        }
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var read = (int)Math.Min(remaining, buffer.Length);
+            buffer[..read].Span.Fill((byte)' ');
+            remaining -= read;
+            return ValueTask.FromResult(read);
+        }
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     private sealed class TitleScorer : IFitScorer

@@ -24,8 +24,7 @@ public sealed partial class GreenhouseJobDiscoveryService(HttpClient client, IFi
         request.Headers.UserAgent.ParseAdd("ApplicationFoundry/0.1 (local career studio)");
         using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var feed = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        using var feed = await JobFeedReader.ReadAsync(response.Content, cancellationToken);
         if (feed.RootElement.ValueKind != JsonValueKind.Object
             || !feed.RootElement.TryGetProperty("jobs", out var jobs)
             || jobs.ValueKind != JsonValueKind.Array)

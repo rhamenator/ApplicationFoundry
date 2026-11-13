@@ -613,7 +613,7 @@
         {
             message = "That Greenhouse board was not found. Check the token from the employer's board URL.";
         }
-        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException or InvalidDataException)
         {
             message = "Job search is temporarily unavailable. Try again later or import a posting below.";
         }
