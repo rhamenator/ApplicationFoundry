@@ -65,7 +65,11 @@ internal static class Program
         var databasePath = Path.Combine(Path.GetTempPath(), $"application-foundry-startup-{Guid.NewGuid():N}.db");
         try
         {
-            var connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath }.ToString();
+            var connectionString = new SqliteConnectionStringBuilder
+            {
+                DataSource = databasePath,
+                Pooling = false
+            }.ToString();
             using var provider = CreateProvider(connectionString, new DesktopDocumentExport());
             using var scope = provider.CreateScope();
             scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Database.Migrate();

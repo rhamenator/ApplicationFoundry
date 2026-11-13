@@ -67,8 +67,12 @@ jobs:
       - run: dotnet publish src/ApplicationFoundry.Desktop/ApplicationFoundry.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:Version=$env:APP_VERSION -o publish-desktop
       - shell: pwsh
         run: |
-          $process = Start-Process -FilePath (Resolve-Path publish-desktop/ApplicationFoundry.Desktop.exe) -ArgumentList '--self-test' -PassThru -Wait
-          if ($process.ExitCode -ne 0) { throw "Desktop startup self-test failed with exit code $($process.ExitCode)" }
+          $errorPath = Join-Path $env:RUNNER_TEMP 'application-foundry-desktop-self-test.stderr'
+          $process = Start-Process -FilePath (Resolve-Path publish-desktop/ApplicationFoundry.Desktop.exe) -ArgumentList '--self-test' -RedirectStandardError $errorPath -PassThru -Wait
+          if ($process.ExitCode -ne 0) {
+            if (Test-Path $errorPath) { Get-Content $errorPath | Select-Object -First 30 }
+            throw "Desktop startup self-test failed with exit code $($process.ExitCode)"
+          }
       - shell: pwsh
         run: ./tests/packaging/assert-windows-gui-subsystem.ps1 publish-desktop/ApplicationFoundry.Desktop.exe
       - run: choco install innosetup --no-progress -y
