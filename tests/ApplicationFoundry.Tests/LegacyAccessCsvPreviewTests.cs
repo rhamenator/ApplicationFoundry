@@ -22,6 +22,22 @@ public sealed class LegacyAccessCsvPreviewTests
     }
 
     [Fact]
+    public void ExplicitWindows1252ChoicePreservesLegacyCharacters()
+    {
+        var codePage = CodePagesEncodingProvider.Instance.GetEncoding(1252)!;
+        var bytes = codePage.GetBytes("Claim\r\nCoordinated café hiring for €12 million\r\n");
+
+        Assert.Equal("UTF8_REQUIRED", Assert.Throws<LegacyAccessCsvPreviewException>(() =>
+            previewer.Preview("access-export.txt", bytes)).Code);
+        var preview = previewer.Preview("access-export.txt", bytes,
+            LegacyAccessCsvPreviewService.Windows1252EncodingName);
+
+        Assert.Equal("access-export.txt", preview.FileName);
+        Assert.Equal("Coordinated café hiring for €12 million", preview.SampleRows[0][0]);
+        Assert.Equal(64, preview.SourceSha256.Length);
+    }
+
+    [Fact]
     public void RejectsAmbiguousOrMalformedTablesBeforeMapping()
     {
         var duplicate = Assert.Throws<LegacyAccessCsvPreviewException>(() => previewer.Preview(

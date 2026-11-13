@@ -28,22 +28,34 @@ public sealed class LegacyAccessCsvPreviewException(string code) : Exception(cod
 public sealed class LegacyAccessCsvPreviewService
 {
     public const int MaxFileBytes = 8 * 1024 * 1024;
+    public const string Utf8EncodingName = "utf8";
+    public const string Windows1252EncodingName = "windows-1252";
     private const int MaxColumns = 40;
     private const int MaxRows = 5000;
     private static readonly HashSet<string> AllowedTargets =
         ["first-name", "last-name", "email", "phone", "summary", "evidence-claim"];
 
-    public LegacyAccessCsvPreview Preview(string fileName, byte[] bytes)
+    public LegacyAccessCsvPreview Preview(string fileName, byte[] bytes, string encodingName = Utf8EncodingName)
     {
         var safeName = Path.GetFileName(fileName.Replace('\\', '/'));
         if (string.IsNullOrWhiteSpace(safeName) || safeName.Length > 200
-            || !safeName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+            || (!safeName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)
+                && !safeName.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)))
             throw new LegacyAccessCsvPreviewException("FILE_NAME");
         if (bytes.Length is 0 or > MaxFileBytes)
             throw new LegacyAccessCsvPreviewException("SIZE_LIMIT");
 
         string text;
-        try { text = new UTF8Encoding(false, true).GetString(bytes).TrimStart('\uFEFF'); }
+        try
+        {
+            text = encodingName switch
+            {
+                Utf8EncodingName => new UTF8Encoding(false, true).GetString(bytes).TrimStart('\uFEFF'),
+                Windows1252EncodingName => (CodePagesEncodingProvider.Instance.GetEncoding(1252)
+                    ?? throw new LegacyAccessCsvPreviewException("ENCODING")).GetString(bytes),
+                _ => throw new LegacyAccessCsvPreviewException("ENCODING")
+            };
+        }
         catch (DecoderFallbackException) { throw new LegacyAccessCsvPreviewException("UTF8_REQUIRED"); }
         var rows = ParseRows(text);
         if (rows.Count < 2) throw new LegacyAccessCsvPreviewException("NO_RECORDS");

@@ -138,8 +138,14 @@
 
 <section class="studio-panel">
     <h2>Preview an Access table export</h2>
-    <p>Export one table from Access as UTF-8 CSV (up to 8 MB), then inspect its columns and first five records here. This preview stays in memory; it does not change your profile or import records.</p>
-    <InputFile OnChange="PreviewLegacyCsvAsync" accept=".csv" />
+    <p>In Access, export one table or query as comma-delimited text with field names in the first row. Choose UTF-8 when available; for older Western European Access exports, select Windows-1252 below. <a href="https://support.microsoft.com/en-us/access/export-data-to-a-text-file" target="_blank" rel="noopener noreferrer">Microsoft's export steps</a> explain the wizard. Export one record for profile fields or up to 5,000 records for evidence. This preview stays in memory.</p>
+    <label>CSV text encoding
+        <select class="form-select" @bind="legacyCsvEncoding" @bind:after="ClearLegacyCsvPreview">
+            <option value="utf8">UTF-8</option>
+            <option value="windows-1252">Windows-1252 (older Western European exports)</option>
+        </select>
+    </label>
+    <InputFile OnChange="PreviewLegacyCsvAsync" accept=".csv,.txt" />
     @if (pendingLegacyCsv is not null)
     {
         <div class="mt-3">
@@ -511,6 +517,7 @@
     private List<CandidateSourceDocument> sourceDocuments = [];
     private CandidateDocumentImport? pendingSource;
     private LegacyAccessCsvPreview? pendingLegacyCsv;
+    private string legacyCsvEncoding = LegacyAccessCsvPreviewService.Utf8EncodingName;
     private LegacyAccessMappingPreview? legacyMappedPreview;
     private LegacyEvidenceImportPlan? legacyImportPlan;
     private LegacyProfileImportPlan? legacyProfileImportPlan;
@@ -609,20 +616,14 @@
 
     private async Task PreviewLegacyCsvAsync(InputFileChangeEventArgs eventArgs)
     {
-        pendingLegacyCsv = null;
-        legacyMappedPreview = null;
-        legacyImportPlan = null;
-        legacyProfileImportPlan = null;
-        legacyProfileImportConfirmed = false;
-        legacyImportConfirmed = false;
-        legacyColumnDrafts = [];
+        ClearLegacyCsvPreview();
         try
         {
             var file = eventArgs.File;
             await using var stream = file.OpenReadStream(LegacyAccessCsvPreviewService.MaxFileBytes);
             using var buffer = new MemoryStream();
             await stream.CopyToAsync(buffer);
-            pendingLegacyCsv = LegacyCsvPreviewer.Preview(file.Name, buffer.ToArray());
+            pendingLegacyCsv = LegacyCsvPreviewer.Preview(file.Name, buffer.ToArray(), legacyCsvEncoding);
             legacyColumnDrafts = pendingLegacyCsv.Columns.Select(column => new LegacyColumnDraft { Column = column }).ToList();
             message = "Review the table columns and sample records before mapping.";
         }
@@ -630,7 +631,7 @@
         {
             message = exception.Code switch
             {
-                "UTF8_REQUIRED" => "Export this Access table as UTF-8 CSV and try again.",
+                "UTF8_REQUIRED" => "This file is not UTF-8. If it came from older Western European Access, select Windows-1252 and upload it again.",
                 "SIZE_LIMIT" or "LIMIT" => "Choose a CSV up to 8 MB with at most 40 columns and 5,000 records.",
                 _ => "The CSV could not be previewed. Check its header, quoting, and row widths."
             };
@@ -639,6 +640,17 @@
         {
             message = "Choose a CSV up to 8 MB with at most 40 columns and 5,000 records.";
         }
+    }
+
+    private void ClearLegacyCsvPreview()
+    {
+        pendingLegacyCsv = null;
+        legacyMappedPreview = null;
+        legacyImportPlan = null;
+        legacyProfileImportPlan = null;
+        legacyProfileImportConfirmed = false;
+        legacyImportConfirmed = false;
+        legacyColumnDrafts = [];
     }
 
     private void ClearLegacyMappingPreview()

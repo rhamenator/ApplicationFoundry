@@ -67,6 +67,19 @@ you also want to erase the saved profile, jobs, documents, and application
 history. On a fresh Windows installation, the first launch may take longer
 than later launches while Windows finishes setting up the user profile.
 
+## Bring Access records over
+
+In Access, export a table or query using **Export → Text File**, choose a
+comma delimiter, and include field names in the first row. [Microsoft's Access
+export guide](https://support.microsoft.com/en-us/access/export-data-to-a-text-file)
+shows the wizard. The studio accepts a comma-delimited `.csv` or `.txt` file up
+to 8 MB. Select UTF-8, or Windows-1252 for an older Western European export,
+before uploading. Export one applicant record for profile fields, or up to
+5,000 records for evidence claims. Review the mapping and proposed changes,
+then confirm the import. Each imported batch can be undone from the studio.
+The app does not save the source bytes in its database; it stores selected
+values plus the file's name and hash locally.
+
 The web host runs a small ONNX logistic model, while the Windows desktop host
 uses a managed equivalent. Both score locally. Their four visible inputs measure keyword evidence, overall profile
 coverage, role-title alignment, and evidence depth. It is a drafting aid, not a
