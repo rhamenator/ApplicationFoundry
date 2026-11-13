@@ -38,8 +38,7 @@ public sealed partial class ArbeitnowJobDiscoveryService(HttpClient client, IFit
 
         var keywords = (filters?.Keywords ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         var minimumFitScore = Math.Clamp(filters?.MinimumFitScore ?? 0, 0, 1);
-        var matches = new List<DiscoveredJob>();
-        var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var matches = new Dictionary<string, DiscoveredJob>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in jobs.EnumerateArray().Take(500))
         {
             var title = ReadString(item, "title");
@@ -71,12 +70,14 @@ public sealed partial class ArbeitnowJobDiscoveryService(HttpClient client, IFit
                 Description = description[..Math.Min(description.Length, 30000)]
             };
             var fit = scorer.Score(profile, opportunity);
-            if (fit.Score < minimumFitScore || !seenUrls.Add(url.GetLeftPart(UriPartial.Path).TrimEnd('/'))) continue;
-            matches.Add(new DiscoveredJob(opportunity.RoleTitle, opportunity.Organization,
+            if (fit.Score < minimumFitScore) continue;
+            var key = url.GetLeftPart(UriPartial.Path).TrimEnd('/');
+            if (matches.TryGetValue(key, out var previous) && previous.FitScore >= fit.Score) continue;
+            matches[key] = new DiscoveredJob(opportunity.RoleTitle, opportunity.Organization,
                 opportunity.SourceUrl, opportunity.Description, fit.Score, fit.Explanation,
-                "Arbeitnow", jobLocation));
+                "Arbeitnow", jobLocation);
         }
-        return matches.OrderByDescending(job => job.FitScore).Take(12).ToArray();
+        return matches.Values.OrderByDescending(job => job.FitScore).Take(12).ToArray();
     }
 
     private static string ReadString(JsonElement item, string property) =>

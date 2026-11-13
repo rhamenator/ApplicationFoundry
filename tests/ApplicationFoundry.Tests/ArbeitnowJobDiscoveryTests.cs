@@ -47,7 +47,19 @@ public sealed class ArbeitnowJobDiscoveryTests
         Assert.Equal("https://www.arbeitnow.fr/jobs/companies/example/analyst", result.SourceUrl);
     }
 
-    private sealed class FeedHandler(string postingUrl) : HttpMessageHandler
+    [Fact]
+    public async Task Tracking_duplicate_keeps_the_best_local_match()
+    {
+        var handler = new FeedHandler("https://www.arbeitnow.com/jobs/companies/example/analyst", betterDuplicate: true);
+        var service = new ArbeitnowJobDiscoveryService(new HttpClient(handler), new DescriptionScorer());
+
+        var result = Assert.Single(await service.FindMatchesAsync(new CandidateProfile()));
+
+        Assert.Equal(.9f, result.FitScore);
+        Assert.Equal("Build reports with C#", result.Description);
+    }
+
+    private sealed class FeedHandler(string postingUrl, bool betterDuplicate = false) : HttpMessageHandler
     {
         public string? RequestUri { get; private set; }
         public bool RequestHadBody { get; private set; }
@@ -59,7 +71,7 @@ public sealed class ArbeitnowJobDiscoveryTests
             var feed = $$"""
                 {"data":[
                   {"title":"Analyst","company_name":"Example","location":"London","description":"<p>Build reports &amp; dashboards</p>","url":"{{postingUrl}}"},
-                  {"title":"Analyst","company_name":"Example","location":"London","description":"<p>Build reports &amp; dashboards</p>","url":"{{postingUrl}}?source=feed"},
+                  {"title":"Analyst","company_name":"Example","location":"London","description":"<p>{{(betterDuplicate ? "Build reports with C#" : "Build reports &amp; dashboards")}}</p>","url":"{{postingUrl}}?source=feed"},
                   {"title":"Analyst","company_name":"Example","location":"Paris","description":"<p>Build reports</p>","url":"{{postingUrl}}"},
                   {"title":"Analyst","company_name":"Example","location":"London","description":"<p>Build reports</p>","url":"https://evil.test/jobs/analyst"}
                 ]}
@@ -71,5 +83,11 @@ public sealed class ArbeitnowJobDiscoveryTests
     private sealed class SyntheticScorer : IFitScorer
     {
         public FitResult Score(CandidateProfile profile, JobOpportunity job) => new(.9f, "local score", []);
+    }
+
+    private sealed class DescriptionScorer : IFitScorer
+    {
+        public FitResult Score(CandidateProfile profile, JobOpportunity job) =>
+            new(job.Description.Contains("C#", StringComparison.Ordinal) ? .9f : .2f, "local score", []);
     }
 }
