@@ -29,6 +29,7 @@ public sealed class LegacyAccessCsvPreviewService
 {
     public const int MaxFileBytes = 8 * 1024 * 1024;
     public const string Utf8EncodingName = "utf8";
+    public const string Utf16LeEncodingName = "utf16-le";
     public const string Windows1252EncodingName = "windows-1252";
     private const int MaxColumns = 40;
     private const int MaxRows = 5000;
@@ -52,12 +53,17 @@ public sealed class LegacyAccessCsvPreviewService
             text = encodingName switch
             {
                 Utf8EncodingName => new UTF8Encoding(false, true).GetString(bytes).TrimStart('\uFEFF'),
+                Utf16LeEncodingName => ReadUtf16Le(bytes),
                 Windows1252EncodingName => (CodePagesEncodingProvider.Instance.GetEncoding(1252)
                     ?? throw new LegacyAccessCsvPreviewException("ENCODING")).GetString(bytes),
                 _ => throw new LegacyAccessCsvPreviewException("ENCODING")
             };
         }
-        catch (DecoderFallbackException) { throw new LegacyAccessCsvPreviewException("UTF8_REQUIRED"); }
+        catch (DecoderFallbackException)
+        {
+            throw new LegacyAccessCsvPreviewException(
+                encodingName == Utf8EncodingName ? "UTF8_REQUIRED" : "ENCODING");
+        }
         var rows = ParseRows(text);
         if (rows.Count < 2) throw new LegacyAccessCsvPreviewException("NO_RECORDS");
         var columns = rows[0].Select(column => column.Trim()).ToArray();
@@ -71,6 +77,14 @@ public sealed class LegacyAccessCsvPreviewService
             SourceSha256 = Convert.ToHexStringLower(SHA256.HashData(bytes)),
             AllRows = rows.Skip(1).ToArray()
         };
+    }
+
+    private static string ReadUtf16Le(byte[] bytes)
+    {
+        if (bytes.Length % 2 != 0 ||
+            (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF))
+            throw new LegacyAccessCsvPreviewException("ENCODING");
+        return new UnicodeEncoding(false, true, true).GetString(bytes).TrimStart('\uFEFF');
     }
 
     public LegacyAccessMappingPreview PreviewMapping(LegacyAccessCsvPreview source, IReadOnlyList<string> targets)

@@ -38,6 +38,25 @@ public sealed class LegacyAccessCsvPreviewTests
     }
 
     [Fact]
+    public void ExplicitUtf16LeChoicePreservesUnicodeAndRejectsWrongByteOrder()
+    {
+        const string csv = "Name,Claim\r\nAvery,Coordinated café hiring €12 million\r\n";
+        var bytes = new UnicodeEncoding(false, true, true).GetPreamble()
+            .Concat(new UnicodeEncoding(false, true, true).GetBytes(csv)).ToArray();
+
+        var preview = previewer.Preview("access-export.txt", bytes,
+            LegacyAccessCsvPreviewService.Utf16LeEncodingName);
+
+        Assert.Equal("Coordinated café hiring €12 million", preview.SampleRows[0][1]);
+        Assert.Equal("ENCODING", Assert.Throws<LegacyAccessCsvPreviewException>(() =>
+            previewer.Preview("access-export.txt", [0xFE, 0xFF, 0x00, 0x41],
+                LegacyAccessCsvPreviewService.Utf16LeEncodingName)).Code);
+        Assert.Equal("ENCODING", Assert.Throws<LegacyAccessCsvPreviewException>(() =>
+            previewer.Preview("access-export.txt", bytes[..^1],
+                LegacyAccessCsvPreviewService.Utf16LeEncodingName)).Code);
+    }
+
+    [Fact]
     public void RejectsAmbiguousOrMalformedTablesBeforeMapping()
     {
         var duplicate = Assert.Throws<LegacyAccessCsvPreviewException>(() => previewer.Preview(

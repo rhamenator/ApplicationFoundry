@@ -139,10 +139,11 @@
 
 <section class="studio-panel">
     <h2>Preview an Access table export</h2>
-    <p>In Access, export one table or query as comma-delimited text with field names in the first row. Choose UTF-8 when available; for older Western European Access exports, select Windows-1252 below. <a href="https://support.microsoft.com/en-us/access/export-data-to-a-text-file" target="_blank" rel="noopener noreferrer">Microsoft's export steps</a> explain the wizard. Export one record for profile fields or up to 5,000 records for evidence. This preview stays in memory.</p>
+    <p>In Access, export one table or query as comma-delimited text with field names in the first row. Choose the text encoding used by the export below. <a href="https://support.microsoft.com/en-us/access/export-data-to-a-text-file" target="_blank" rel="noopener noreferrer">Microsoft's export steps</a> explain the wizard. Export one record for profile fields or up to 5,000 records for evidence. This preview stays in memory.</p>
     <label>CSV text encoding
         <select class="form-select" @bind="legacyCsvEncoding" @bind:after="ClearLegacyCsvPreview">
             <option value="utf8">UTF-8</option>
+            <option value="utf16-le">UTF-16 little-endian</option>
             <option value="windows-1252">Windows-1252 (older Western European exports)</option>
         </select>
     </label>
