@@ -391,14 +391,58 @@ namespace ApplicationFoundry.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("LegacyImportBatchId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("ProfileId")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("LegacyImportBatchId");
+
                     b.HasIndex("ProfileId");
 
                     b.ToTable("EvidenceItems");
+                });
+
+            modelBuilder.Entity("ApplicationFoundry.Data.LegacyEvidenceImportBatch", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ClaimCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("ImportedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ProfileId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SourceSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProfileId");
+
+                    b.HasIndex("UserId", "ImportedAt");
+
+                    b.ToTable("LegacyEvidenceImportBatches");
                 });
 
             modelBuilder.Entity("ApplicationFoundry.Data.JobOpportunity", b =>
@@ -653,6 +697,20 @@ namespace ApplicationFoundry.Migrations
                 {
                     b.HasOne("ApplicationFoundry.Data.CandidateProfile", null)
                         .WithMany("Evidence")
+                        .HasForeignKey("ProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ApplicationFoundry.Data.LegacyEvidenceImportBatch", null)
+                        .WithMany()
+                        .HasForeignKey("LegacyImportBatchId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("ApplicationFoundry.Data.LegacyEvidenceImportBatch", b =>
+                {
+                    b.HasOne("ApplicationFoundry.Data.CandidateProfile", null)
+                        .WithMany()
                         .HasForeignKey("ProfileId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

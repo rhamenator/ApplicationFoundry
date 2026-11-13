@@ -27,10 +27,22 @@ public sealed class EvidenceItem
 {
     public int Id { get; set; }
     public int ProfileId { get; set; }
+    public int? LegacyImportBatchId { get; set; }
     [Required, MaxLength(80)] public string Kind { get; set; } = "achievement";
     [Required, MaxLength(240)] public string Claim { get; set; } = "";
     [MaxLength(4000)] public string Details { get; set; } = "";
     [MaxLength(1000)] public string Keywords { get; set; } = "";
+}
+
+public sealed class LegacyEvidenceImportBatch
+{
+    public int Id { get; set; }
+    [Required, MaxLength(450)] public string UserId { get; set; } = "";
+    public int ProfileId { get; set; }
+    [Required, MaxLength(200)] public string FileName { get; set; } = "";
+    [Required, MaxLength(64)] public string SourceSha256 { get; set; } = "";
+    public int ClaimCount { get; set; }
+    public DateTimeOffset ImportedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
 public sealed class CandidateSourceDocument
