@@ -10,6 +10,11 @@ public sealed partial class ArbeitnowJobDiscoveryService(HttpClient client, IFit
 {
     private static readonly Uri EuropeFeed = new("https://www.arbeitnow.com/api/job-board-api");
     private static readonly Uri UkFeed = new("https://www.arbeitnow.co.uk/api/job-board-api");
+    private static readonly HashSet<string> PostingHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "www.arbeitnow.com", "www.arbeitnow.co.uk", "www.arbeitnow.fr",
+        "www.arbeitnow.ch", "www.arbeitnow.nl"
+    };
 
     public async Task<IReadOnlyList<DiscoveredJob>> FindMatchesAsync(
         CandidateProfile profile, JobSearchFilters? filters = null, string location = "",
@@ -45,7 +50,8 @@ public sealed partial class ArbeitnowJobDiscoveryService(HttpClient client, IFit
             if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(employer)
                 || string.IsNullOrWhiteSpace(description)
                 || !Uri.TryCreate(rawUrl, UriKind.Absolute, out var url)
-                || url.Scheme != Uri.UriSchemeHttps || !url.Host.Equals(feedUrl.Host, StringComparison.OrdinalIgnoreCase)
+                || url.Scheme != Uri.UriSchemeHttps || !url.IsDefaultPort
+                || !string.IsNullOrEmpty(url.UserInfo) || !PostingHosts.Contains(url.Host)
                 || !url.AbsolutePath.StartsWith("/jobs/", StringComparison.Ordinal))
                 continue;
             if (!string.IsNullOrWhiteSpace(location)

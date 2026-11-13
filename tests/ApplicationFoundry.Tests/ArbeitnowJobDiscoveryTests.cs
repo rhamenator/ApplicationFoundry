@@ -37,6 +37,16 @@ public sealed class ArbeitnowJobDiscoveryTests
         Assert.Null(handler.RequestUri);
     }
 
+    [Fact]
+    public async Task EuropeFeedAcceptsOtherOfficialCountryPostings()
+    {
+        var handler = new FeedHandler("https://www.arbeitnow.fr/jobs/companies/example/analyst");
+        var service = new ArbeitnowJobDiscoveryService(new HttpClient(handler), new SyntheticScorer());
+        var result = Assert.Single(await service.FindMatchesAsync(new CandidateProfile(),
+            new JobSearchFilters("analyst", .5f), "London"));
+        Assert.Equal("https://www.arbeitnow.fr/jobs/companies/example/analyst", result.SourceUrl);
+    }
+
     private sealed class FeedHandler(string postingUrl) : HttpMessageHandler
     {
         public string? RequestUri { get; private set; }
