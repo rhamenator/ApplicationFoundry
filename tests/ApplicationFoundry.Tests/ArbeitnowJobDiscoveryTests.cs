@@ -59,6 +59,7 @@ public sealed class ArbeitnowJobDiscoveryTests
             var feed = $$"""
                 {"data":[
                   {"title":"Analyst","company_name":"Example","location":"London","description":"<p>Build reports &amp; dashboards</p>","url":"{{postingUrl}}"},
+                  {"title":"Analyst","company_name":"Example","location":"London","description":"<p>Build reports &amp; dashboards</p>","url":"{{postingUrl}}?source=feed"},
                   {"title":"Analyst","company_name":"Example","location":"Paris","description":"<p>Build reports</p>","url":"{{postingUrl}}"},
                   {"title":"Analyst","company_name":"Example","location":"London","description":"<p>Build reports</p>","url":"https://evil.test/jobs/analyst"}
                 ]}

@@ -71,7 +71,7 @@ public sealed partial class ArbeitnowJobDiscoveryService(HttpClient client, IFit
                 Description = description[..Math.Min(description.Length, 30000)]
             };
             var fit = scorer.Score(profile, opportunity);
-            if (fit.Score < minimumFitScore || !seenUrls.Add(opportunity.SourceUrl)) continue;
+            if (fit.Score < minimumFitScore || !seenUrls.Add(url.GetLeftPart(UriPartial.Path).TrimEnd('/'))) continue;
             matches.Add(new DiscoveredJob(opportunity.RoleTitle, opportunity.Organization,
                 opportunity.SourceUrl, opportunity.Description, fit.Score, fit.Explanation,
                 "Arbeitnow", jobLocation));
