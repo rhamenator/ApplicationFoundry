@@ -49,8 +49,7 @@ public sealed class CareerDocumentService : ICareerDocumentService
     public byte[] ToPdf(string content)
     {
         var lines = content.Replace("\r", "").Split('\n')
-            .SelectMany(line => line.Length == 0 ? [""] : Enumerable.Range(0, (line.Length + 89) / 90)
-                .Select(index => line.Substring(index * 90, Math.Min(90, line.Length - index * 90))))
+            .SelectMany(WrapPdfLine)
             .Select(line => EscapePdf(ToWinAnsi(line))).ToArray();
         var pages = lines.Chunk(48).ToArray();
         var fontId = 3 + pages.Length * 2;
@@ -98,6 +97,20 @@ public sealed class CareerDocumentService : ICareerDocumentService
     }
 
     private static string EscapePdf(string value) => value.Replace("\\", "\\\\").Replace("(", "\\(").Replace(")", "\\)");
+
+    private static IEnumerable<string> WrapPdfLine(string line)
+    {
+        const int maxCharacters = 85;
+        var remaining = line.TrimEnd();
+        while (remaining.Length > maxCharacters)
+        {
+            var breakAt = remaining.LastIndexOf(' ', maxCharacters);
+            if (breakAt <= 0) breakAt = maxCharacters;
+            yield return remaining[..breakAt].TrimEnd();
+            remaining = remaining[breakAt..].TrimStart();
+        }
+        yield return remaining;
+    }
 
     // WinAnsi uses Windows-1252 positions for punctuation above ASCII. Latin1
     // writes those byte values without introducing a platform code-page dependency.
