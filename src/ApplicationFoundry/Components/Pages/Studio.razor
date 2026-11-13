@@ -5,6 +5,7 @@
 @inject IFitScorer FitScorer
 @inject ICareerDocumentService Documents
 @inject ICandidateDocumentImportService DocumentImporter
+@inject LegacyAccessCsvPreviewService LegacyCsvPreviewer
 @inject IClientDocumentExport ClientExport
 @inject IJobDiscoveryService JobDiscovery
 @inject GreenhouseJobDiscoveryService GreenhouseDiscovery
@@ -129,6 +130,30 @@
             {
                 <p>Save the profile before adding evidence claims.</p>
             }
+        </div>
+    }
+</section>
+
+<section class="studio-panel">
+    <h2>Preview an Access table export</h2>
+    <p>Export one table from Access as UTF-8 CSV (up to 8 MB), then inspect its columns and first five records here. This preview stays in memory; it does not change your profile or import records.</p>
+    <InputFile OnChange="PreviewLegacyCsvAsync" accept=".csv" />
+    @if (pendingLegacyCsv is not null)
+    {
+        <div class="mt-3">
+            <h3>@pendingLegacyCsv.FileName · @pendingLegacyCsv.RowCount records</h3>
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead><tr>@foreach (var column in pendingLegacyCsv.Columns) { <th>@column</th> }</tr></thead>
+                    <tbody>
+                        @foreach (var row in pendingLegacyCsv.SampleRows)
+                        {
+                            <tr>@foreach (var value in row) { <td>@value</td> }</tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-secondary">Review the source table before mapping. Saving and reversible import are still being built.</p>
         </div>
     }
 </section>
@@ -408,6 +433,7 @@
     private Dictionary<int, FollowUpDraft> followUpDrafts = [];
     private List<CandidateSourceDocument> sourceDocuments = [];
     private CandidateDocumentImport? pendingSource;
+    private LegacyAccessCsvPreview? pendingLegacyCsv;
     private int mappingSourceId;
     private string mappingSourceName = "";
     private string mappingSourceHash = "";
@@ -488,6 +514,33 @@
         catch (Exception exception) when (exception is IOException or InvalidOperationException or ArgumentException)
         {
             message = "Choose a valid TXT, DOCX, or text-based PDF no larger than 2 MB.";
+        }
+    }
+
+    private async Task PreviewLegacyCsvAsync(InputFileChangeEventArgs eventArgs)
+    {
+        pendingLegacyCsv = null;
+        try
+        {
+            var file = eventArgs.File;
+            await using var stream = file.OpenReadStream(LegacyAccessCsvPreviewService.MaxFileBytes);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            pendingLegacyCsv = LegacyCsvPreviewer.Preview(file.Name, buffer.ToArray());
+            message = "Review the table columns and sample records before mapping.";
+        }
+        catch (LegacyAccessCsvPreviewException exception)
+        {
+            message = exception.Code switch
+            {
+                "UTF8_REQUIRED" => "Export this Access table as UTF-8 CSV and try again.",
+                "SIZE_LIMIT" or "LIMIT" => "Choose a CSV up to 8 MB with at most 40 columns and 5,000 records.",
+                _ => "The CSV could not be previewed. Check its header, quoting, and row widths."
+            };
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or ArgumentException)
+        {
+            message = "Choose a CSV up to 8 MB with at most 40 columns and 5,000 records.";
         }
     }
 
