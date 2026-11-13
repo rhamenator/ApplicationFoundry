@@ -70,10 +70,16 @@ public static class EmployerFormFillPlanner
                     reasons.Add($"Required field '{field.Label}' needs a reviewed answer.");
                 continue;
             }
-            if (field.Type.Equals("select", StringComparison.OrdinalIgnoreCase) &&
-                (field.Options is null || !field.Options.Contains(answer.Answer, StringComparer.OrdinalIgnoreCase)))
+            if (field.Required && string.IsNullOrWhiteSpace(answer.Answer))
             {
-                reasons.Add($"Reviewed answer for '{field.Label}' is not an available choice.");
+                reasons.Add($"Required field '{field.Label}' has an empty reviewed answer.");
+                continue;
+            }
+            if (field.Type.Equals("select", StringComparison.OrdinalIgnoreCase) &&
+                (field.Options is null || field.Options.Count(option =>
+                    option.Equals(answer.Answer, StringComparison.OrdinalIgnoreCase)) != 1))
+            {
+                reasons.Add($"Reviewed answer for '{field.Label}' is not one unambiguous available choice.");
                 continue;
             }
             values.Add(new ProposedFieldValue(field.Key, field.Label, answer.Answer));

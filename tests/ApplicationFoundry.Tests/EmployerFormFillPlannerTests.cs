@@ -71,7 +71,30 @@ public sealed class EmployerFormFillPlannerTests
             [new EmployerFormField("availability", "Availability", "select", true, ["Immediately"])]));
         Assert.False(plan.IsComplete);
         Assert.Empty(plan.Values);
-        Assert.Contains(plan.Reasons, reason => reason.Contains("not an available choice", StringComparison.Ordinal));
+        Assert.Contains(plan.Reasons, reason => reason.Contains("not one unambiguous available choice", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Repeated_select_label_blocks_before_browser_handoff()
+    {
+        var plan = EmployerFormFillPlanner.Prepare(Job(), new EmployerFormSnapshot(
+            new Uri("https://example.test/apply"),
+            [new EmployerFormField("availability", "Availability", "select", true, ["Four weeks", "four WEEKS"])]));
+        Assert.False(plan.IsComplete);
+        Assert.Empty(plan.Values);
+        Assert.Contains(plan.Reasons, reason => reason.Contains("unambiguous", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Empty_required_reviewed_answer_blocks_before_browser_handoff()
+    {
+        var job = Job();
+        job.FormPlan!.Answers[0].Answer = " ";
+        var plan = EmployerFormFillPlanner.Prepare(job, new EmployerFormSnapshot(
+            new Uri("https://example.test/apply"), [new EmployerFormField("email", "Email", "email", true)]));
+        Assert.False(plan.IsComplete);
+        Assert.Empty(plan.Values);
+        Assert.Contains(plan.Reasons, reason => reason.Contains("empty reviewed answer", StringComparison.Ordinal));
     }
 
     [Fact]
