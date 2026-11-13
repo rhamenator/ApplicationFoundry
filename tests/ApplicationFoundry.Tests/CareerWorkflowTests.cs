@@ -118,4 +118,17 @@ public sealed class CareerWorkflowTests
         Assert.Equal(2, pdf.NumberOfPages);
         Assert.Contains("Evidence line 60", pdf.GetPage(2).Text);
     }
+
+    [Fact]
+    public void Pdf_starts_a_new_page_with_the_whole_evidence_item()
+    {
+        var content = string.Join('\n', Enumerable.Range(1, 30).Select(index =>
+            $"• Synthetic evidence item {index}: reviewed applicant workflows, documented the result, and checked that the exported record remained readable across a page boundary."));
+        var bytes = new CareerDocumentService().ToPdf(content);
+
+        using var pdf = PdfDocument.Open(bytes);
+        Assert.True(pdf.NumberOfPages > 1);
+        Assert.StartsWith("• Synthetic evidence item", pdf.GetPage(2).Text);
+        Assert.Contains("Synthetic evidence item 30", pdf.GetPage(pdf.NumberOfPages).Text);
+    }
 }

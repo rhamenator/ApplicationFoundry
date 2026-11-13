@@ -48,10 +48,9 @@ public sealed class CareerDocumentService : ICareerDocumentService
 
     public byte[] ToPdf(string content)
     {
-        var lines = content.Replace("\r", "").Split('\n')
-            .SelectMany(WrapPdfLine)
-            .Select(line => EscapePdf(ToWinAnsi(line))).ToArray();
-        var pages = lines.Chunk(48).ToArray();
+        var groups = content.Replace("\r", "").Split('\n')
+            .Select(line => WrapPdfLine(line).Select(part => EscapePdf(ToWinAnsi(part))).ToArray());
+        var pages = PaginatePdfLines(groups);
         var fontId = 3 + pages.Length * 2;
         var objects = new List<string>
         {
@@ -100,16 +99,66 @@ public sealed class CareerDocumentService : ICareerDocumentService
 
     private static IEnumerable<string> WrapPdfLine(string line)
     {
-        const int maxCharacters = 85;
+        // Helvetica is drawn at 10 pt across a 504 pt text area. These
+        // conservative widths are in thousandths of an em.
+        const int maxWidth = 50_400;
         var remaining = line.TrimEnd();
-        while (remaining.Length > maxCharacters)
+        if (remaining.Length == 0)
         {
-            var breakAt = remaining.LastIndexOf(' ', maxCharacters);
-            if (breakAt <= 0) breakAt = maxCharacters;
+            yield return "";
+            yield break;
+        }
+        while (remaining.Length > 0)
+        {
+            var width = 0;
+            var breakAt = 0;
+            var lastSpace = -1;
+            while (breakAt < remaining.Length && width + PdfGlyphWidth(remaining[breakAt]) <= maxWidth)
+            {
+                width += PdfGlyphWidth(remaining[breakAt]);
+                if (remaining[breakAt] == ' ') lastSpace = breakAt;
+                breakAt++;
+            }
+            if (breakAt == remaining.Length)
+            {
+                yield return remaining;
+                yield break;
+            }
+            if (lastSpace > 0) breakAt = lastSpace;
+            if (breakAt == 0) breakAt = 1;
             yield return remaining[..breakAt].TrimEnd();
             remaining = remaining[breakAt..].TrimStart();
         }
-        yield return remaining;
+    }
+
+    private static int PdfGlyphWidth(char character) => character switch
+    {
+        ' ' => 300,
+        'i' or 'l' or 'j' or 't' or 'f' or 'r' or 'I' => 400,
+        'm' or 'w' or 'M' => 900,
+        'W' or '@' or '%' or '—' or '–' => 1_100,
+        >= 'A' and <= 'Z' => 750,
+        >= 'a' and <= 'z' => 700,
+        >= '0' and <= '9' => 600,
+        _ => 700
+    };
+
+    private static string[][] PaginatePdfLines(IEnumerable<string[]> groups)
+    {
+        const int linesPerPage = 48;
+        var pages = new List<List<string>> { new() };
+        foreach (var group in groups)
+        {
+            if (group.Length <= linesPerPage && pages[^1].Count > 0 &&
+                pages[^1].Count + group.Length > linesPerPage)
+                pages.Add(new List<string>());
+            foreach (var line in group)
+            {
+                if (pages[^1].Count == linesPerPage) pages.Add(new List<string>());
+                pages[^1].Add(line);
+            }
+        }
+        return pages.Select(page => page.ToArray()).ToArray();
     }
 
     // WinAnsi uses Windows-1252 positions for punctuation above ASCII. Latin1
