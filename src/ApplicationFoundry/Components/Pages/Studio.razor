@@ -7,6 +7,7 @@
 @inject ICandidateDocumentImportService DocumentImporter
 @inject LegacyAccessCsvPreviewService LegacyCsvPreviewer
 @inject LegacyEvidenceImportService EvidenceImporter
+@inject LegacyProfileImportService ProfileImporter
 @inject IClientDocumentExport ClientExport
 @inject IJobDiscoveryService JobDiscovery
 @inject GreenhouseJobDiscoveryService GreenhouseDiscovery
@@ -193,7 +194,8 @@
             {
                 <p class="mt-3">Proposed changes to your saved profile from one CSV record:</p>
                 <ul>@foreach (var field in legacyProfileImportPlan.Fields) { <li>@field.Key: @field.Value</li> }</ul>
-                <p class="text-secondary">This is a plan only. No profile fields have been changed.</p>
+                <label class="mt-2"><input type="checkbox" @bind="legacyProfileImportConfirmed" /> I reviewed these profile changes and want to save them.</label>
+                <button class="btn btn-primary mt-2" type="button" disabled="@(!legacyProfileImportConfirmed || profile.Id == 0 || legacyImportBusy)" @onclick="ImportLegacyProfileAsync">Import profile fields</button>
             }
             @if (legacyImportPlan is not null)
             {
@@ -215,6 +217,18 @@
             {
                 <li>@batch.FileName · @batch.ClaimCount claims · @batch.ImportedAt.ToLocalTime().ToString("g")
                     <button class="btn btn-sm btn-outline-danger" type="button" disabled="@legacyImportBusy" @onclick="() => UndoLegacyEvidenceImportAsync(batch.Id)">Undo this import</button>
+                </li>
+            }
+        </ul>
+    }
+    @if (legacyProfileImportBatches.Count > 0)
+    {
+        <h3 class="mt-3">Imported profile changes</h3>
+        <ul>
+            @foreach (var batch in legacyProfileImportBatches)
+            {
+                <li>@batch.FileName · @batch.ImportedAt.ToLocalTime().ToString("g")
+                    <button class="btn btn-sm btn-outline-danger" type="button" disabled="@legacyImportBusy" @onclick="() => UndoLegacyProfileAsync(batch.Id)">Undo these changes</button>
                 </li>
             }
         </ul>
@@ -500,6 +514,8 @@
     private LegacyAccessMappingPreview? legacyMappedPreview;
     private LegacyEvidenceImportPlan? legacyImportPlan;
     private LegacyProfileImportPlan? legacyProfileImportPlan;
+    private List<LegacyProfileImportBatch> legacyProfileImportBatches = [];
+    private bool legacyProfileImportConfirmed;
     private List<LegacyEvidenceImportBatch> legacyImportBatches = [];
     private bool legacyImportConfirmed;
     private bool legacyImportBusy;
@@ -560,6 +576,8 @@
             .OrderByDescending(source => source.ImportedAt).ToList();
         legacyImportBatches = (await db.LegacyEvidenceImportBatches.Where(batch => batch.UserId == userId).ToListAsync())
             .OrderByDescending(batch => batch.ImportedAt).ToList();
+        legacyProfileImportBatches = (await db.LegacyProfileImportBatches.Where(batch => batch.UserId == userId).ToListAsync())
+            .OrderByDescending(batch => batch.ImportedAt).ToList();
     }
 
     private async Task PreviewSourceDocumentAsync(InputFileChangeEventArgs eventArgs)
@@ -595,6 +613,7 @@
         legacyMappedPreview = null;
         legacyImportPlan = null;
         legacyProfileImportPlan = null;
+        legacyProfileImportConfirmed = false;
         legacyImportConfirmed = false;
         legacyColumnDrafts = [];
         try
@@ -627,6 +646,7 @@
         legacyMappedPreview = null;
         legacyImportPlan = null;
         legacyProfileImportPlan = null;
+        legacyProfileImportConfirmed = false;
         legacyImportConfirmed = false;
     }
 
@@ -635,6 +655,7 @@
         if (pendingLegacyCsv is null) return;
         legacyImportPlan = null;
         legacyProfileImportPlan = null;
+        legacyProfileImportConfirmed = false;
         legacyImportConfirmed = false;
         try
         {
@@ -658,6 +679,7 @@
     {
         if (pendingLegacyCsv is null || legacyMappedPreview is null) return;
         legacyProfileImportPlan = null;
+        legacyProfileImportConfirmed = false;
         legacyImportConfirmed = false;
         try
         {
@@ -683,6 +705,7 @@
         if (pendingLegacyCsv is null || legacyMappedPreview is null) return;
         legacyImportPlan = null;
         legacyImportConfirmed = false;
+        legacyProfileImportConfirmed = false;
         try
         {
             legacyProfileImportPlan = LegacyCsvPreviewer.PrepareProfileImport(
@@ -703,6 +726,55 @@
         }
     }
 
+    private async Task ImportLegacyProfileAsync()
+    {
+        if (!legacyProfileImportConfirmed || legacyProfileImportPlan is null || profile.Id == 0 || legacyImportBusy) return;
+        legacyImportBusy = true;
+        try
+        {
+            await ProfileImporter.ImportAsync(userId, legacyProfileImportPlan);
+            pendingLegacyCsv = null;
+            legacyMappedPreview = null;
+            legacyImportPlan = null;
+            legacyProfileImportPlan = null;
+            legacyProfileImportConfirmed = false;
+            legacyColumnDrafts = [];
+            await ReloadAsync();
+            message = "Imported the reviewed profile fields. You can undo this change below.";
+        }
+        catch (LegacyProfileImportException exception)
+        {
+            message = exception.Code switch
+            {
+                "PROFILE_REQUIRED" => "Save your profile before importing these fields.",
+                "PROFILE_INVALID" => "The proposed changes would make your profile invalid. Review your profile and CSV.",
+                _ => "The profile import plan is no longer valid. Preview the CSV again."
+            };
+        }
+        finally { legacyImportBusy = false; }
+    }
+
+    private async Task UndoLegacyProfileAsync(int batchId)
+    {
+        if (legacyImportBusy) return;
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "Undo this profile import? Imported fields will return to their previous values if they have not changed since import.");
+        if (!confirmed) return;
+        legacyImportBusy = true;
+        try
+        {
+            var restored = await ProfileImporter.UndoAsync(userId, batchId);
+            await ReloadAsync();
+            message = $"Restored {restored} profile fields to their previous values.";
+        }
+        catch (LegacyProfileImportException exception)
+        {
+            message = exception.Code == "PROFILE_CHANGED"
+                ? "One or more imported fields changed since import. Review them before undoing this batch."
+                : "That profile import batch was not found or is invalid. Reload the page and try again.";
+        }
+        finally { legacyImportBusy = false; }
+    }
+
     private async Task ImportLegacyEvidenceAsync()
     {
         if (!legacyImportConfirmed || legacyImportPlan is null || profile.Id == 0 || legacyImportBusy) return;
@@ -714,6 +786,7 @@
             legacyMappedPreview = null;
             legacyImportPlan = null;
             legacyProfileImportPlan = null;
+            legacyProfileImportConfirmed = false;
             legacyImportConfirmed = false;
             legacyColumnDrafts = [];
             await ReloadAsync();

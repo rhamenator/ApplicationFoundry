@@ -445,6 +445,52 @@ namespace ApplicationFoundry.Migrations
                     b.ToTable("LegacyEvidenceImportBatches");
                 });
 
+            modelBuilder.Entity("ApplicationFoundry.Data.LegacyProfileImportBatch", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AfterJson")
+                        .IsRequired()
+                        .HasMaxLength(30000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BeforeJson")
+                        .IsRequired()
+                        .HasMaxLength(30000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("ImportedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ProfileId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SourceSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProfileId");
+
+                    b.HasIndex("UserId", "ImportedAt");
+
+                    b.ToTable("LegacyProfileImportBatches");
+                });
+
             modelBuilder.Entity("ApplicationFoundry.Data.JobOpportunity", b =>
                 {
                     b.Property<int>("Id")
@@ -708,6 +754,15 @@ namespace ApplicationFoundry.Migrations
                 });
 
             modelBuilder.Entity("ApplicationFoundry.Data.LegacyEvidenceImportBatch", b =>
+                {
+                    b.HasOne("ApplicationFoundry.Data.CandidateProfile", null)
+                        .WithMany()
+                        .HasForeignKey("ProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ApplicationFoundry.Data.LegacyProfileImportBatch", b =>
                 {
                     b.HasOne("ApplicationFoundry.Data.CandidateProfile", null)
                         .WithMany()

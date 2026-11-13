@@ -45,6 +45,18 @@ public sealed class LegacyEvidenceImportBatch
     public DateTimeOffset ImportedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
+public sealed class LegacyProfileImportBatch
+{
+    public int Id { get; set; }
+    [Required, MaxLength(450)] public string UserId { get; set; } = "";
+    public int ProfileId { get; set; }
+    [Required, MaxLength(200)] public string FileName { get; set; } = "";
+    [Required, MaxLength(64)] public string SourceSha256 { get; set; } = "";
+    [Required, MaxLength(30000)] public string BeforeJson { get; set; } = "";
+    [Required, MaxLength(30000)] public string AfterJson { get; set; } = "";
+    public DateTimeOffset ImportedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
 public sealed class CandidateSourceDocument
 {
     public int Id { get; set; }

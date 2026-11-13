@@ -81,6 +81,7 @@ builder.Services.AddSingleton<ICareerDocumentService, CareerDocumentService>();
 builder.Services.AddSingleton<ICandidateDocumentImportService, CandidateDocumentImportService>();
 builder.Services.AddSingleton<LegacyAccessCsvPreviewService>();
 builder.Services.AddSingleton<LegacyEvidenceImportService>();
+builder.Services.AddSingleton<LegacyProfileImportService>();
 builder.Services.AddSingleton<IClientDocumentExport, BrowserDocumentExport>();
 builder.Services.AddHealthChecks();
 
