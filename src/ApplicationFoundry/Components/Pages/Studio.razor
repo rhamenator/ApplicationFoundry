@@ -428,10 +428,12 @@
             .Include(job => job.FormPlan).ThenInclude(plan => plan!.Entries)
             .Where(job => job.UserId == userId).ToListAsync())
             .OrderByDescending(job => job.ImportedAt).ToList();
+        var previousDrafts = formDrafts;
         formDrafts = jobs.ToDictionary(job => job.Id, job => new FormPlanDraft
         {
             Mode = job.FormPlan?.Mode ?? FormSubmissionMode.SubmitPersonally,
-            Rules = job.FormPlan?.Rules ?? ""
+            Rules = job.FormPlan?.Rules ?? "",
+            SnapshotJson = previousDrafts.TryGetValue(job.Id, out var previous) ? previous.SnapshotJson : ""
         });
         ruleResults.Clear();
         followUpDrafts = jobs.ToDictionary(job => job.Id, job => new FollowUpDraft
