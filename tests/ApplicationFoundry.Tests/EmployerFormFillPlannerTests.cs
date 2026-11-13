@@ -97,6 +97,27 @@ public sealed class EmployerFormFillPlannerTests
         Assert.Contains(plan.Reasons, reason => reason.Contains("empty reviewed answer", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("https://portfolio.example.test/avery", true)]
+    [InlineData("http://portfolio.example.test/avery", false)]
+    [InlineData("https://user:secret@portfolio.example.test/avery", false)]
+    [InlineData("not a URL", false)]
+    public void Reviewed_portfolio_url_is_validated_before_browser_handoff(string answer, bool expected)
+    {
+        var job = Job();
+        job.FormPlan!.Answers.Add(new ApplicationFormAnswer
+        {
+            FieldLabel = "Portfolio",
+            Answer = answer,
+            Source = "Reviewed synthetic profile"
+        });
+        var plan = EmployerFormFillPlanner.Prepare(job, new EmployerFormSnapshot(
+            new Uri("https://example.test/apply"), [new EmployerFormField("portfolio", "Portfolio", "url", true)]));
+        Assert.Equal(expected, plan.IsComplete);
+        if (expected) Assert.Equal(answer, Assert.Single(plan.Values).Value);
+        else Assert.Empty(plan.Values);
+    }
+
     [Fact]
     public void Repeated_visible_label_blocks_ambiguous_fill()
     {

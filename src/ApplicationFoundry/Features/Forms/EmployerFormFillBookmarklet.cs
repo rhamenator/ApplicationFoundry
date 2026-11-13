@@ -43,7 +43,7 @@ public static class EmployerFormFillBookmarklet
           });
           if (JSON.stringify(fields) !== JSON.stringify(packet.fields))
             return fail('The live form changed since it was reviewed.');
-          const allowed = new Set(['text', 'email', 'tel', 'textarea', 'select']);
+          const allowed = new Set(['text', 'email', 'tel', 'url', 'textarea', 'select']);
           const seen = new Set();
           const actions = [];
           for (const value of packet.values) {
@@ -54,6 +54,13 @@ public static class EmployerFormFillBookmarklet
             const index = fields.findIndex(field => field.key === value.key && field.label === value.label);
             if (index < 0 || !allowed.has(fields[index].type) || elements[index].readOnly)
               return fail('A proposed field is unavailable or read-only.');
+            if (fields[index].type === 'url') {
+              let address;
+              try { address = new URL(value.value); }
+              catch { return fail('A proposed URL is invalid.'); }
+              if (address.protocol !== 'https:' || address.username || address.password)
+                return fail('A proposed URL must use HTTPS without credentials.');
+            }
             let nextValue = value.value;
             if (fields[index].type === 'select') {
               const matches = Array.from(elements[index].options).filter(option =>

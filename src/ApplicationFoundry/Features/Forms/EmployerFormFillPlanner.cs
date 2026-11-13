@@ -11,7 +11,7 @@ public static class EmployerFormFillPlanner
 {
     private static readonly HashSet<string> SupportedTypes = new(StringComparer.OrdinalIgnoreCase)
     {
-        "text", "email", "tel", "textarea", "select"
+        "text", "email", "tel", "url", "textarea", "select"
     };
 
     public static FormFillProposal Prepare(JobOpportunity job, EmployerFormSnapshot form)
@@ -73,6 +73,13 @@ public static class EmployerFormFillPlanner
             if (field.Required && string.IsNullOrWhiteSpace(answer.Answer))
             {
                 reasons.Add($"Required field '{field.Label}' has an empty reviewed answer.");
+                continue;
+            }
+            if (field.Type.Equals("url", StringComparison.OrdinalIgnoreCase) &&
+                (!Uri.TryCreate(answer.Answer, UriKind.Absolute, out var answerUrl) ||
+                 answerUrl.Scheme != Uri.UriSchemeHttps || !string.IsNullOrEmpty(answerUrl.UserInfo)))
+            {
+                reasons.Add($"Reviewed answer for '{field.Label}' must be an HTTPS URL without credentials.");
                 continue;
             }
             if (field.Type.Equals("select", StringComparison.OrdinalIgnoreCase) &&
