@@ -185,6 +185,13 @@
                         </tbody>
                     </table>
                 </div>
+                <button class="btn btn-outline-primary mt-2" type="button" @onclick="PrepareLegacyEvidenceImport">Prepare evidence import</button>
+            }
+            @if (legacyImportPlan is not null)
+            {
+                <p class="mt-3">Ready for review: @legacyImportPlan.Claims.Count unique evidence claims; @legacyImportPlan.EmptyOrDuplicateRows empty or duplicate rows skipped.</p>
+                <ul>@foreach (var claim in legacyImportPlan.Claims.Take(5)) { <li>@claim</li> }</ul>
+                <p class="text-secondary">This is a plan only. No evidence has been saved.</p>
             }
             <p class="text-secondary">Saving and reversible import are still being built.</p>
         </div>
@@ -468,6 +475,7 @@
     private CandidateDocumentImport? pendingSource;
     private LegacyAccessCsvPreview? pendingLegacyCsv;
     private LegacyAccessMappingPreview? legacyMappedPreview;
+    private LegacyEvidenceImportPlan? legacyImportPlan;
     private List<LegacyColumnDraft> legacyColumnDrafts = [];
     private int mappingSourceId;
     private string mappingSourceName = "";
@@ -556,6 +564,7 @@
     {
         pendingLegacyCsv = null;
         legacyMappedPreview = null;
+        legacyImportPlan = null;
         legacyColumnDrafts = [];
         try
         {
@@ -582,11 +591,16 @@
         }
     }
 
-    private void ClearLegacyMappingPreview() => legacyMappedPreview = null;
+    private void ClearLegacyMappingPreview()
+    {
+        legacyMappedPreview = null;
+        legacyImportPlan = null;
+    }
 
     private void PreviewLegacyMapping()
     {
         if (pendingLegacyCsv is null) return;
+        legacyImportPlan = null;
         try
         {
             legacyMappedPreview = LegacyCsvPreviewer.PreviewMapping(
@@ -601,6 +615,28 @@
                 "MAPPING_DUPLICATE" => "Choose each destination field only once.",
                 "MAPPING_EMPTY" => "Choose at least one destination field to preview.",
                 _ => "Check the column mapping and try again."
+            };
+        }
+    }
+
+    private void PrepareLegacyEvidenceImport()
+    {
+        if (pendingLegacyCsv is null || legacyMappedPreview is null) return;
+        try
+        {
+            legacyImportPlan = LegacyCsvPreviewer.PrepareEvidenceImport(
+                pendingLegacyCsv, legacyColumnDrafts.Select(draft => draft.Target).ToArray());
+            message = "Review the evidence import plan. Nothing has been saved.";
+        }
+        catch (LegacyAccessCsvPreviewException exception)
+        {
+            legacyImportPlan = null;
+            message = exception.Code switch
+            {
+                "EVIDENCE_MAPPING" => "For evidence import, map exactly one column to Evidence claim and ignore the others.",
+                "CLAIM_LENGTH" => "An evidence claim exceeds 240 characters. Edit the CSV before importing it.",
+                "NO_CLAIMS" => "The mapped column has no nonempty evidence claims.",
+                _ => "Check the evidence mapping and try again."
             };
         }
     }

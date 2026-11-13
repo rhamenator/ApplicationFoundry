@@ -1,12 +1,20 @@
 using System.Text;
+using System.Security.Cryptography;
 
 namespace ApplicationFoundry.Features.Documents;
 
 public sealed record LegacyAccessCsvPreview(
-    string FileName, IReadOnlyList<string> Columns, IReadOnlyList<IReadOnlyList<string>> SampleRows, int RowCount);
+    string FileName, IReadOnlyList<string> Columns, IReadOnlyList<IReadOnlyList<string>> SampleRows, int RowCount)
+{
+    public string SourceSha256 { get; init; } = "";
+    internal IReadOnlyList<IReadOnlyList<string>> AllRows { get; init; } = [];
+}
 
 public sealed record LegacyAccessMappingPreview(
     IReadOnlyList<string> TargetFields, IReadOnlyList<IReadOnlyDictionary<string, string>> SampleRows, int RowCount);
+
+public sealed record LegacyEvidenceImportPlan(
+    string FileName, string SourceSha256, IReadOnlyList<string> Claims, int EmptyOrDuplicateRows);
 
 public sealed class LegacyAccessCsvPreviewException(string code) : Exception(code)
 {
@@ -41,7 +49,11 @@ public sealed class LegacyAccessCsvPreviewService
             throw new LegacyAccessCsvPreviewException("COLUMNS");
         if (rows.Skip(1).Any(row => row.Count != columns.Length))
             throw new LegacyAccessCsvPreviewException("ROW_WIDTH");
-        return new LegacyAccessCsvPreview(safeName, columns, rows.Skip(1).Take(5).ToArray(), rows.Count - 1);
+        return new LegacyAccessCsvPreview(safeName, columns, rows.Skip(1).Take(5).ToArray(), rows.Count - 1)
+        {
+            SourceSha256 = Convert.ToHexStringLower(SHA256.HashData(bytes)),
+            AllRows = rows.Skip(1).ToArray()
+        };
     }
 
     public LegacyAccessMappingPreview PreviewMapping(LegacyAccessCsvPreview source, IReadOnlyList<string> targets)
@@ -62,6 +74,29 @@ public sealed class LegacyAccessCsvPreviewService
             return (IReadOnlyDictionary<string, string>)mapped;
         }).ToArray();
         return new LegacyAccessMappingPreview(selected, samples, source.RowCount);
+    }
+
+    public LegacyEvidenceImportPlan PrepareEvidenceImport(LegacyAccessCsvPreview source, IReadOnlyList<string> targets)
+    {
+        PreviewMapping(source, targets);
+        if (targets.Count(target => target == "evidence-claim") != 1
+            || targets.Any(target => target.Length > 0 && target != "evidence-claim"))
+            throw new LegacyAccessCsvPreviewException("EVIDENCE_MAPPING");
+
+        var index = targets.Select((target, columnIndex) => (target, columnIndex))
+            .First(pair => pair.target == "evidence-claim").columnIndex;
+        var claims = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var skipped = 0;
+        foreach (var row in source.AllRows)
+        {
+            var claim = row[index].Trim();
+            if (claim.Length > 240) throw new LegacyAccessCsvPreviewException("CLAIM_LENGTH");
+            if (claim.Length == 0 || !seen.Add(claim)) { skipped++; continue; }
+            claims.Add(claim);
+        }
+        if (claims.Count == 0) throw new LegacyAccessCsvPreviewException("NO_CLAIMS");
+        return new LegacyEvidenceImportPlan(source.FileName, source.SourceSha256, claims, skipped);
     }
 
     private static List<IReadOnlyList<string>> ParseRows(string text)

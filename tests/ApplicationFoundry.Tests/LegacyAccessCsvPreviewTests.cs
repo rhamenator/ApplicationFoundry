@@ -76,4 +76,34 @@ public sealed class LegacyAccessCsvPreviewTests
         Assert.Equal("MAPPING_DUPLICATE", duplicate.Code);
         Assert.Equal("MAPPING_TARGET", unknown.Code);
     }
+
+    [Fact]
+    public void EvidencePlanUsesAllRowsAndReportsDuplicatesWithoutWritingRecords()
+    {
+        var csv = "Claim,Ignored\n" + string.Join('\n', Enumerable.Range(1, 8)
+            .Select(index => $"Synthetic achievement {index},unused")) + "\nsynthetic achievement 1,unused\n,unused";
+        var source = previewer.Preview("evidence.csv", Encoding.UTF8.GetBytes(csv));
+
+        var plan = previewer.PrepareEvidenceImport(source, ["evidence-claim", ""]);
+
+        Assert.Equal(8, plan.Claims.Count);
+        Assert.Equal(2, plan.EmptyOrDuplicateRows);
+        Assert.Equal("Synthetic achievement 8", plan.Claims[7]);
+        Assert.Equal(64, plan.SourceSha256.Length);
+    }
+
+    [Fact]
+    public void EvidencePlanRejectsMixedProfileFieldsAndOverlongClaims()
+    {
+        var source = previewer.Preview("evidence.csv", "Claim,Name\nSynthetic claim,Jordan"u8.ToArray());
+        var tooLong = previewer.Preview("evidence.csv", Encoding.UTF8.GetBytes("Claim\n" + new string('x', 241)));
+
+        var mixed = Assert.Throws<LegacyAccessCsvPreviewException>(() =>
+            previewer.PrepareEvidenceImport(source, ["evidence-claim", "first-name"]));
+        var length = Assert.Throws<LegacyAccessCsvPreviewException>(() =>
+            previewer.PrepareEvidenceImport(tooLong, ["evidence-claim"]));
+
+        Assert.Equal("EVIDENCE_MAPPING", mixed.Code);
+        Assert.Equal("CLAIM_LENGTH", length.Code);
+    }
 }
