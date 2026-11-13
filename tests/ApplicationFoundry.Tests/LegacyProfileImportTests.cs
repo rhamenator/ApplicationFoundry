@@ -26,8 +26,11 @@ public sealed class LegacyProfileImportTests
                 await db.Database.MigrateAsync("20261113073800_LegacyEvidenceImportBatch");
                 db.CandidateProfiles.Add(new CandidateProfile
                 {
-                    UserId = "synthetic-applicant", FirstName = "Jordan", LastName = "Example",
-                    Email = "old@example.test", Summary = "Existing synthetic summary"
+                    UserId = "synthetic-applicant",
+                    FirstName = "Jordan",
+                    LastName = "Example",
+                    Email = "old@example.test",
+                    Summary = "Existing synthetic summary"
                 });
                 await db.SaveChangesAsync();
                 await db.Database.MigrateAsync();
