@@ -40,7 +40,9 @@ public sealed class CareerDocumentService : ICareerDocumentService
         {
             WriteEntry(archive, "[Content_Types].xml", "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/></Types>");
             WriteEntry(archive, "_rels/.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/></Relationships>");
-            var paragraphs = string.Join("", content.Replace("\r", "").Split('\n').Select(line => $"<w:p><w:r><w:t xml:space=\"preserve\">{SecurityElement.Escape(line)}</w:t></w:r></w:p>"));
+            var isResume = content.Contains("\nPROFILE\n", StringComparison.Ordinal);
+            var paragraphs = string.Join("", content.Replace("\r", "").Split('\n')
+                .Select((line, index) => ToDocxParagraph(line, index, isResume)));
             WriteEntry(archive, "word/document.xml", $"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body>{paragraphs}<w:sectPr/></w:body></w:document>");
         }
         return output.ToArray();
@@ -93,6 +95,22 @@ public sealed class CareerDocumentService : ICareerDocumentService
         var entry = archive.CreateEntry(name, CompressionLevel.Fastest);
         using var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false));
         writer.Write(content);
+    }
+
+    private static string ToDocxParagraph(string line, int index, bool isResume)
+    {
+        var name = isResume && index == 0;
+        var heading = isResume && line.Length is > 0 and < 50 &&
+            line.Any(char.IsLetter) && line.Where(char.IsLetter).All(char.IsUpper);
+        var bullet = isResume && line.StartsWith("• ", StringComparison.Ordinal);
+        var paragraph = name
+            ? "<w:pPr><w:spacing w:after=\"80\"/></w:pPr>"
+            : heading
+                ? "<w:pPr><w:keepNext/><w:spacing w:before=\"160\" w:after=\"80\"/></w:pPr>"
+                : bullet ? "<w:pPr><w:ind w:left=\"360\" w:hanging=\"180\"/></w:pPr>" : "";
+        var run = name ? "<w:rPr><w:b/><w:sz w:val=\"32\"/></w:rPr>"
+            : heading ? "<w:rPr><w:b/><w:sz w:val=\"22\"/></w:rPr>" : "";
+        return $"<w:p>{paragraph}<w:r>{run}<w:t xml:space=\"preserve\">{SecurityElement.Escape(line)}</w:t></w:r></w:p>";
     }
 
     private static string EscapePdf(string value) => value.Replace("\\", "\\\\").Replace("(", "\\(").Replace(")", "\\)");
