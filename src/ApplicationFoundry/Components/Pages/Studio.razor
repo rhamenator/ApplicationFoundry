@@ -249,18 +249,18 @@
             <option value="remoteok">Remote OK (remote roles)</option>
             <option value="greenhouse">Greenhouse employer board</option>
             <option value="lever">Lever employer site</option>
+            <option value="all">Remote OK and selected employer boards</option>
         </select>
     </label>
-    @if (searchSource == "greenhouse")
+    @if (searchSource == "greenhouse" || searchSource == "all")
     {
         <div class="profile-grid">
             <label>Employer name<input class="form-control" @bind="greenhouseEmployer" /></label>
             <label>Greenhouse board token<input class="form-control" @bind="greenhouseBoardToken" /></label>
-            <label>Location contains (optional)<input class="form-control" @bind="searchLocation" /></label>
         </div>
         <p class="text-secondary">Use the final segment of the employer's Greenhouse board URL as its token. The employer name and token identify the board; your profile and filters stay local.</p>
     }
-    @if (searchSource == "lever")
+    @if (searchSource == "lever" || searchSource == "all")
     {
         <div class="profile-grid">
             <label>Employer name<input class="form-control" @bind="leverEmployer" /></label>
@@ -271,9 +271,16 @@
                     <option value="eu">EU</option>
                 </select>
             </label>
-            <label>Location contains (optional)<input class="form-control" @bind="searchLocation" /></label>
         </div>
         <p class="text-secondary">Use the employer's Lever site name from its jobs.lever.co or jobs.eu.lever.co URL. Your profile and filters stay local.</p>
+    }
+    @if (searchSource == "greenhouse" || searchSource == "lever" || searchSource == "all")
+    {
+        <label>Location contains (optional, employer boards only)<input class="form-control" @bind="searchLocation" /></label>
+    }
+    @if (searchSource == "all")
+    {
+        <p class="text-secondary">Enter one or both employer boards above. Remote OK and the configured boards are searched together; a source failure will not hide results from the others.</p>
     }
     <div class="profile-grid">
         <label>Required keywords (comma separated)<input class="form-control" @bind="searchKeywords" /></label>
@@ -287,7 +294,7 @@
         </label>
     </div>
     <p class="text-secondary">All keywords must appear in the posting. Filters are applied on this computer.</p>
-    <button class="btn btn-primary" type="button" disabled="@(isSearching || profile.Id == 0 || profile.Evidence.Count == 0 || (searchSource == "greenhouse" && (string.IsNullOrWhiteSpace(greenhouseEmployer) || string.IsNullOrWhiteSpace(greenhouseBoardToken))) || (searchSource == "lever" && (string.IsNullOrWhiteSpace(leverEmployer) || string.IsNullOrWhiteSpace(leverSiteToken))))" @onclick="SearchJobsAsync">
+    <button class="btn btn-primary" type="button" disabled="@(isSearching || profile.Id == 0 || profile.Evidence.Count == 0 || (searchSource == "greenhouse" && (string.IsNullOrWhiteSpace(greenhouseEmployer) || string.IsNullOrWhiteSpace(greenhouseBoardToken))) || (searchSource == "lever" && (string.IsNullOrWhiteSpace(leverEmployer) || string.IsNullOrWhiteSpace(leverSiteToken))) || (searchSource == "all" && !CanSearchAll))" @onclick="SearchJobsAsync">
         @(isSearching ? "Searching…" : "Find matching jobs")
     </button>
     @if (profile.Id == 0 || profile.Evidence.Count == 0)
@@ -546,6 +553,18 @@
     private string leverSiteToken = "";
     private string leverRegion = "global";
     private string searchLocation = "";
+    private bool CanSearchAll
+    {
+        get
+        {
+            var greenhouseName = !string.IsNullOrWhiteSpace(greenhouseEmployer);
+            var greenhouseToken = !string.IsNullOrWhiteSpace(greenhouseBoardToken);
+            var leverName = !string.IsNullOrWhiteSpace(leverEmployer);
+            var leverToken = !string.IsNullOrWhiteSpace(leverSiteToken);
+            return greenhouseName == greenhouseToken && leverName == leverToken
+                && (greenhouseName || leverName);
+        }
+    }
     private string userId = "";
     private string message = "";
 
@@ -974,9 +993,11 @@
             {
                 "greenhouse" => await GreenhouseDiscovery.FindMatchesAsync(profile, greenhouseBoardToken, greenhouseEmployer, filters, searchLocation),
                 "lever" => await LeverDiscovery.FindMatchesAsync(profile, leverSiteToken, leverEmployer, filters, searchLocation, leverRegion),
+                "all" => await SearchAllConfiguredSourcesAsync(filters),
                 _ => await JobDiscovery.FindMatchesAsync(profile, filters)
             };
-            if (discoveredJobs.Count == 0) message = "No postings matched these filters right now. Try broader filters or import a posting below.";
+            if (discoveredJobs.Count == 0 && string.IsNullOrEmpty(message))
+                message = "No postings matched these filters right now. Try broader filters or import a posting below.";
         }
         catch (ArgumentException exception)
         {
@@ -998,6 +1019,32 @@
         {
             isSearching = false;
         }
+    }
+
+    private async Task<IReadOnlyList<DiscoveredJob>> SearchAllConfiguredSourcesAsync(JobSearchFilters filters)
+    {
+        var batches = new List<IReadOnlyList<DiscoveredJob>>();
+        var failed = new List<string>();
+        async Task SearchOneAsync(string name, Func<Task<IReadOnlyList<DiscoveredJob>>> search)
+        {
+            try { batches.Add(await search()); }
+            catch (Exception exception) when (exception is ArgumentException or HttpRequestException
+                or TaskCanceledException or System.Text.Json.JsonException or InvalidDataException)
+            {
+                failed.Add(name);
+            }
+        }
+
+        await SearchOneAsync("Remote OK", () => JobDiscovery.FindMatchesAsync(profile, filters));
+        if (!string.IsNullOrWhiteSpace(greenhouseEmployer))
+            await SearchOneAsync("Greenhouse", () => GreenhouseDiscovery.FindMatchesAsync(
+                profile, greenhouseBoardToken, greenhouseEmployer, filters, searchLocation));
+        if (!string.IsNullOrWhiteSpace(leverEmployer))
+            await SearchOneAsync("Lever", () => LeverDiscovery.FindMatchesAsync(
+                profile, leverSiteToken, leverEmployer, filters, searchLocation, leverRegion));
+        if (failed.Count > 0)
+            message = $"Could not search {string.Join(", ", failed)}. Check its board details or try again; results from other sources are shown.";
+        return JobSearchAggregator.Merge(batches);
     }
 
     private async Task DraftDiscoveredJobAsync(DiscoveredJob result)

@@ -10,7 +10,8 @@ The current draft is an early slice of that workflow. It has a candidate
 profile, evidence library, local fit signals, versioned resume and cover letter
 drafts, approval before export, and an activity log. Job discovery currently
 covers Remote OK plus applicant-selected Greenhouse and Lever employer sites,
-with local filters and ranking. It accepts TXT, DOCX, and text-based PDF source
+with local filters and ranking. A combined search can query the selected boards
+together. It accepts TXT, DOCX, and text-based PDF source
 documents for review, and supports reviewed, reversible import from one Access
 table exported as UTF-8 CSV. Broader discovery and the full workflow remain in
 development.
