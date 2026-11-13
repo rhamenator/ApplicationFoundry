@@ -12,6 +12,7 @@
 @inject IJobDiscoveryService JobDiscovery
 @inject GreenhouseJobDiscoveryService GreenhouseDiscovery
 @inject LeverJobDiscoveryService LeverDiscovery
+@inject ArbeitnowJobDiscoveryService ArbeitnowDiscovery
 @inject IJSRuntime JS
 
 <PageTitle>Career studio</PageTitle>
@@ -250,9 +251,10 @@
     <label>Job source
         <select class="form-select" @bind="searchSource">
             <option value="remoteok">Remote OK (remote roles)</option>
+            <option value="arbeitnow">Arbeitnow (Europe and UK)</option>
             <option value="greenhouse">Greenhouse employer board</option>
             <option value="lever">Lever employer site</option>
-            <option value="all">Remote OK and selected employer boards</option>
+            <option value="all">Remote OK, Arbeitnow, and selected employer boards</option>
         </select>
     </label>
     @if (searchSource == "greenhouse" || searchSource == "all")
@@ -277,13 +279,19 @@
         </div>
         <p class="text-secondary">Use the employer's Lever site name from its jobs.lever.co or jobs.eu.lever.co URL. Your profile and filters stay local.</p>
     }
-    @if (searchSource == "greenhouse" || searchSource == "lever" || searchSource == "all")
+    @if (searchSource == "greenhouse" || searchSource == "lever" || searchSource == "all" || searchSource == "arbeitnow")
     {
-        <label>Location contains (optional, employer boards only)<input class="form-control" @bind="searchLocation" /></label>
+        <label>Location contains (optional, employer boards and Arbeitnow only)<input class="form-control" @bind="searchLocation" /></label>
+    }
+    @if (searchSource == "arbeitnow")
+    {
+        <label>Arbeitnow region
+            <select class="form-select" @bind="arbeitnowRegion"><option value="europe">Europe</option><option value="uk">UK</option></select>
+        </label>
     }
     @if (searchSource == "all")
     {
-        <p class="text-secondary">Enter one or both employer boards above. Remote OK and the configured boards are searched together; a source failure will not hide results from the others.</p>
+        <p class="text-secondary">Remote OK, Arbeitnow Europe and UK, and any employer boards entered above are searched together; a source failure will not hide results from the others.</p>
     }
     <div class="profile-grid">
         <label>Required keywords (comma separated)<input class="form-control" @bind="searchKeywords" /></label>
@@ -556,6 +564,7 @@
     private string leverEmployer = "";
     private string leverSiteToken = "";
     private string leverRegion = "global";
+    private string arbeitnowRegion = "europe";
     private string searchLocation = "";
     private bool CanSearchAll
     {
@@ -565,8 +574,7 @@
             var greenhouseToken = !string.IsNullOrWhiteSpace(greenhouseBoardToken);
             var leverName = !string.IsNullOrWhiteSpace(leverEmployer);
             var leverToken = !string.IsNullOrWhiteSpace(leverSiteToken);
-            return greenhouseName == greenhouseToken && leverName == leverToken
-                && (greenhouseName || leverName);
+            return greenhouseName == greenhouseToken && leverName == leverToken;
         }
     }
     private string userId = "";
@@ -1020,6 +1028,7 @@
             {
                 "greenhouse" => await GreenhouseDiscovery.FindMatchesAsync(profile, greenhouseBoardToken, greenhouseEmployer, filters, searchLocation),
                 "lever" => await LeverDiscovery.FindMatchesAsync(profile, leverSiteToken, leverEmployer, filters, searchLocation, leverRegion),
+                "arbeitnow" => await ArbeitnowDiscovery.FindMatchesAsync(profile, filters, searchLocation, arbeitnowRegion),
                 "all" => await SearchAllConfiguredSourcesAsync(filters),
                 _ => await JobDiscovery.FindMatchesAsync(profile, filters)
             };
@@ -1063,6 +1072,8 @@
         }
 
         await SearchOneAsync("Remote OK", () => JobDiscovery.FindMatchesAsync(profile, filters));
+        await SearchOneAsync("Arbeitnow Europe", () => ArbeitnowDiscovery.FindMatchesAsync(profile, filters, searchLocation));
+        await SearchOneAsync("Arbeitnow UK", () => ArbeitnowDiscovery.FindMatchesAsync(profile, filters, searchLocation, "uk"));
         if (!string.IsNullOrWhiteSpace(greenhouseEmployer))
             await SearchOneAsync("Greenhouse", () => GreenhouseDiscovery.FindMatchesAsync(
                 profile, greenhouseBoardToken, greenhouseEmployer, filters, searchLocation));

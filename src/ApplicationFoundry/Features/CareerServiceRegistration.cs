@@ -10,6 +10,7 @@ public static class CareerServiceRegistration
         services.AddHttpClient<IJobDiscoveryService, RemoteJobDiscoveryService>();
         services.AddHttpClient<GreenhouseJobDiscoveryService>();
         services.AddHttpClient<LeverJobDiscoveryService>();
+        services.AddHttpClient<ArbeitnowJobDiscoveryService>();
         services.AddSingleton<ICareerDocumentService, CareerDocumentService>();
         services.AddSingleton<ICandidateDocumentImportService, CandidateDocumentImportService>();
         services.AddSingleton<LegacyAccessCsvPreviewService>();

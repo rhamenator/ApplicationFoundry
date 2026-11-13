@@ -9,9 +9,7 @@ employer.
 The current draft is an early slice of that workflow. It has a candidate
 profile, evidence library, local fit signals, versioned resume and cover letter
 drafts, approval before export, and an activity log. Job discovery currently
-covers Remote OK plus applicant-selected Greenhouse and Lever employer sites (a board or posting URL can fill in the site details),
-with local filters and ranking. A combined search can query the selected boards
-together. It accepts TXT, DOCX, and text-based PDF source
+covers Remote OK, [Arbeitnow](https://www.arbeitnow.com/blog/job-board-api) Europe and UK, plus applicant-selected Greenhouse and Lever employer sites (a board or posting URL can fill in the site details). Local filters and ranking apply. A combined search can query the public feeds and selected boards together. It accepts TXT, DOCX, and text-based PDF source
 documents for review, and supports reviewed, reversible import from one Access
 table exported as UTF-8 CSV. Broader discovery and the full workflow remain in
 development.

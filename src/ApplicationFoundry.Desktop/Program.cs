@@ -76,6 +76,7 @@ internal static class Program
             scope.ServiceProvider.GetRequiredService<IJobDiscoveryService>();
             scope.ServiceProvider.GetRequiredService<GreenhouseJobDiscoveryService>();
             scope.ServiceProvider.GetRequiredService<LeverJobDiscoveryService>();
+            scope.ServiceProvider.GetRequiredService<ArbeitnowJobDiscoveryService>();
             scope.ServiceProvider.GetRequiredService<ICareerDocumentService>();
             scope.ServiceProvider.GetRequiredService<ICandidateDocumentImportService>();
             scope.ServiceProvider.GetRequiredService<LegacyAccessCsvPreviewService>();

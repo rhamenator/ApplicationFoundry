@@ -23,6 +23,7 @@ public sealed class CareerServiceRegistrationTests
         Assert.NotNull(provider.GetRequiredService<IJobDiscoveryService>());
         Assert.NotNull(provider.GetRequiredService<GreenhouseJobDiscoveryService>());
         Assert.NotNull(provider.GetRequiredService<LeverJobDiscoveryService>());
+        Assert.NotNull(provider.GetRequiredService<ArbeitnowJobDiscoveryService>());
         Assert.NotNull(provider.GetRequiredService<ICareerDocumentService>());
         Assert.NotNull(provider.GetRequiredService<ICandidateDocumentImportService>());
         Assert.NotNull(provider.GetRequiredService<LegacyAccessCsvPreviewService>());
