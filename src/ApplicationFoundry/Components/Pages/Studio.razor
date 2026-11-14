@@ -1092,7 +1092,7 @@
             await SearchOneAsync("Lever", () => LeverDiscovery.FindMatchesAsync(
                 profile, leverSiteToken, leverEmployer, filters, searchLocation, leverRegion));
         if (failed.Count > 0)
-            message = $"Could not search {string.Join(", ", failed)}. Check its board details or try again; results from other sources are shown.";
+            message = $"Could not search these sources: {string.Join(", ", failed)}. Check their details or try again; results from other sources are shown.";
         return JobSearchAggregator.Merge(batches);
     }
 
