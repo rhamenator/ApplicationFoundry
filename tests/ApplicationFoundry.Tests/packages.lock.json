@@ -62,6 +62,11 @@
           "System.IO.Packaging": "10.0.2"
         }
       },
+      "JetDatabaseReader": {
+        "type": "Transitive",
+        "resolved": "3.0.0",
+        "contentHash": "/HIo3XIVKZ4p9kifM3aDWbHw6XGT3SzTy4tPo9xvACdI0xz96p0myRtbSFdZZJUkt2rmHfwccirAgkcd8lnY4w=="
+      },
       "Microsoft.AspNetCore.Cryptography.Internal": {
         "type": "Transitive",
         "resolved": "10.0.10",
@@ -629,6 +634,7 @@
         "type": "Project",
         "dependencies": {
           "DocumentFormat.OpenXml": "[3.5.1, )",
+          "JetDatabaseReader": "[3.0.0, )",
           "Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore": "[10.0.10, )",
           "Microsoft.AspNetCore.Identity.EntityFrameworkCore": "[10.0.10, )",
           "Microsoft.EntityFrameworkCore.Sqlite": "[10.0.10, )",

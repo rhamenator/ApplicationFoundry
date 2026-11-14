@@ -14,6 +14,7 @@ public static class CareerServiceRegistration
         services.AddSingleton<ICareerDocumentService, CareerDocumentService>();
         services.AddSingleton<ICandidateDocumentImportService, CandidateDocumentImportService>();
         services.AddSingleton<LegacyAccessCsvPreviewService>();
+        services.AddSingleton<LegacyAccessFilePreviewService>();
         services.AddSingleton<LegacyEvidenceImportService>();
         services.AddSingleton<LegacyProfileImportService>();
         return services;

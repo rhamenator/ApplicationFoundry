@@ -23,4 +23,8 @@
     <ProjectReference Include="..\..\src\ApplicationFoundry\ApplicationFoundry.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="Fixtures\synthetic-jet4.mdb" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
