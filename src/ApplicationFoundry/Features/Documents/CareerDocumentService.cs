@@ -67,8 +67,11 @@ public sealed class CareerDocumentService : ICareerDocumentService
 
     public byte[] ToPdf(string content)
     {
-        var groups = content.Replace("\r", "").Split('\n')
-            .Select(line => WrapPdfLine(line).Select(part => EscapePdf(ToWinAnsi(part))).ToArray());
+        var normalized = content.Replace("\r", "");
+        var isResume = normalized.Contains("\nPROFILE\n", StringComparison.Ordinal);
+        var groups = normalized.Split('\n')
+            .Select((line, index) => WrapPdfLine(line, isResume && index == 0 ? 33_600 : 50_400)
+                .Select(part => EscapePdf(ToWinAnsi(part))).ToArray());
         var pages = PaginatePdfLines(groups);
         var fontId = 3 + pages.Length * 2;
         var objects = new List<string>
@@ -79,13 +82,24 @@ public sealed class CareerDocumentService : ICareerDocumentService
         for (var pageIndex = 0; pageIndex < pages.Length; pageIndex++)
         {
             var contentId = 4 + pageIndex * 2;
-            var body = new StringBuilder("BT /F1 10 Tf 54 738 Td 13 TL ");
-            foreach (var line in pages[pageIndex]) body.Append('(').Append(line).Append(") Tj T* ");
-            body.Append("ET");
-            objects.Add($"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 {fontId} 0 R >> >> /Contents {contentId} 0 R >>");
+            var body = new StringBuilder();
+            var baseline = 738;
+            for (var lineIndex = 0; lineIndex < pages[pageIndex].Length; lineIndex++)
+            {
+                var line = pages[pageIndex][lineIndex];
+                var name = isResume && pageIndex == 0 && lineIndex == 0;
+                var heading = isResume && IsSectionHeading(line);
+                body.Append(name || heading ? "BT /F2 " : "BT /F1 ")
+                    .Append(name ? "15" : heading ? "11" : "10")
+                    .Append(" Tf 54 ").Append(baseline).Append(" Td (")
+                    .Append(line).Append(") Tj ET ");
+                baseline -= name ? 18 : 13;
+            }
+            objects.Add($"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 {fontId} 0 R /F2 {fontId + 1} 0 R >> >> /Contents {contentId} 0 R >>");
             objects.Add($"<< /Length {Encoding.Latin1.GetByteCount(body.ToString())} >>\nstream\n{body}\nendstream");
         }
         objects.Add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+        objects.Add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
         using var output = new MemoryStream();
         using var writer = new StreamWriter(output, Encoding.Latin1, 1024, true) { NewLine = "\n" };
         writer.WriteLine("%PDF-1.4"); writer.Flush();
@@ -117,8 +131,7 @@ public sealed class CareerDocumentService : ICareerDocumentService
     private static string ToDocxParagraph(string line, int index, bool isResume)
     {
         var name = isResume && index == 0;
-        var heading = isResume && line.Length is > 0 and < 50 &&
-            line.Any(char.IsLetter) && line.Where(char.IsLetter).All(char.IsUpper);
+        var heading = isResume && IsSectionHeading(line);
         var bullet = isResume && line.StartsWith("• ", StringComparison.Ordinal);
         var paragraph = name
             ? "<w:pPr><w:spacing w:after=\"80\"/></w:pPr>"
@@ -132,11 +145,13 @@ public sealed class CareerDocumentService : ICareerDocumentService
 
     private static string EscapePdf(string value) => value.Replace("\\", "\\\\").Replace("(", "\\(").Replace(")", "\\)");
 
-    private static IEnumerable<string> WrapPdfLine(string line)
+    private static bool IsSectionHeading(string line) => line.Length is > 0 and < 50 &&
+        line.Any(char.IsLetter) && line.Where(char.IsLetter).All(char.IsUpper);
+
+    private static IEnumerable<string> WrapPdfLine(string line, int maxWidth)
     {
         // Helvetica is drawn at 10 pt across a 504 pt text area. These
         // conservative widths are in thousandths of an em.
-        const int maxWidth = 50_400;
         var remaining = line.TrimEnd();
         if (remaining.Length == 0)
         {

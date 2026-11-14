@@ -133,6 +133,18 @@ public sealed class CareerWorkflowTests
     }
 
     [Fact]
+    public void Pdf_resume_name_is_larger_than_body_text()
+    {
+        var content = "Avery Rivera\navery@example.test\n\nPROFILE\nSynthetic QA specialist.\n\nSELECTED EVIDENCE\n• Reviewed a test workflow.";
+        var bytes = new CareerDocumentService().ToPdf(content);
+
+        using var pdf = PdfDocument.Open(bytes);
+        var letters = pdf.GetPage(1).Letters;
+        Assert.True(letters.First().FontSize > letters.Min(letter => letter.FontSize));
+        Assert.Contains("Synthetic QA specialist.", pdf.GetPage(1).Text);
+    }
+
+    [Fact]
     public void Pdf_keeps_content_beyond_the_first_page()
     {
         var content = string.Join('\n', Enumerable.Range(1, 60).Select(index => $"Evidence line {index}"));
