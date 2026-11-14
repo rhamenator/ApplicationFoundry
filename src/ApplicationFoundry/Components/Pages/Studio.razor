@@ -6,6 +6,7 @@
 @inject ICareerDocumentService Documents
 @inject ICandidateDocumentImportService DocumentImporter
 @inject LegacyAccessCsvPreviewService LegacyCsvPreviewer
+@inject LegacyAccessFilePreviewService LegacyAccessFilePreviewer
 @inject LegacyEvidenceImportService EvidenceImporter
 @inject LegacyProfileImportService ProfileImporter
 @inject IClientDocumentExport ClientExport
@@ -138,7 +139,22 @@
 </section>
 
 <section class="studio-panel">
-    <h2>Preview an Access table export</h2>
+    <h2>Preview an Access table</h2>
+    <p>Choose a local Access database up to 8 MB, then select one table to preview. A private temporary copy is removed after each read; the upload stays in memory while you review it. Password-protected databases may need a CSV export.</p>
+    <InputFile OnChange="InspectLegacyAccessAsync" accept=".mdb,.accdb" />
+    @if (pendingAccessCatalog is not null)
+    {
+        <label class="mt-2">Table
+            <select class="form-select" @bind="selectedAccessTable" @bind:after="ClearLegacyCsvPreview">
+                @foreach (var tableName in pendingAccessCatalog.Tables)
+                {
+                    <option value="@tableName">@tableName</option>
+                }
+            </select>
+        </label>
+        <button class="btn btn-outline-primary mt-2" type="button" @onclick="PreviewLegacyAccessTable">Preview selected table</button>
+    }
+    <h3 class="mt-3">Or use an Access table export</h3>
     <p>In Access, export one table or query as comma-delimited text with field names in the first row. Choose the text encoding used by the export below. <a href="https://support.microsoft.com/en-us/access/export-data-to-a-text-file" target="_blank" rel="noopener noreferrer">Microsoft's export steps</a> explain the wizard. Export one record for profile fields or up to 5,000 records for evidence. This preview stays in memory.</p>
     <label>CSV text encoding
         <select class="form-select" @bind="legacyCsvEncoding" @bind:after="ClearLegacyCsvPreview">
@@ -204,7 +220,7 @@
             }
             @if (legacyProfileImportPlan is not null)
             {
-                <p class="mt-3">Proposed changes to your saved profile from one CSV record:</p>
+                <p class="mt-3">Proposed changes to your saved profile from one record:</p>
                 <ul>@foreach (var field in legacyProfileImportPlan.Fields) { <li>@field.Key: @field.Value</li> }</ul>
                 <label class="mt-2"><input type="checkbox" @bind="legacyProfileImportConfirmed" /> I reviewed these profile changes and want to save them.</label>
                 <button class="btn btn-primary mt-2" type="button" disabled="@(!legacyProfileImportConfirmed || profile.Id == 0 || legacyImportBusy)" @onclick="ImportLegacyProfileAsync">Import profile fields</button>
@@ -543,6 +559,9 @@
     private List<CandidateSourceDocument> sourceDocuments = [];
     private CandidateDocumentImport? pendingSource;
     private LegacyAccessCsvPreview? pendingLegacyCsv;
+    private LegacyAccessFileCatalog? pendingAccessCatalog;
+    private byte[]? pendingAccessBytes;
+    private string selectedAccessTable = "";
     private string legacyCsvEncoding = LegacyAccessCsvPreviewService.Utf8EncodingName;
     private LegacyAccessMappingPreview? legacyMappedPreview;
     private LegacyEvidenceImportPlan? legacyImportPlan;
@@ -684,6 +703,7 @@
     private async Task PreviewLegacyCsvAsync(InputFileChangeEventArgs eventArgs)
     {
         ClearLegacyCsvPreview();
+        ClearAccessSelection();
         try
         {
             var file = eventArgs.File;
@@ -707,6 +727,66 @@
         {
             message = "Choose a CSV up to 8 MB with at most 40 columns and 5,000 records.";
         }
+    }
+
+    private async Task InspectLegacyAccessAsync(InputFileChangeEventArgs eventArgs)
+    {
+        ClearLegacyCsvPreview();
+        ClearAccessSelection();
+        try
+        {
+            var file = eventArgs.File;
+            await using var stream = file.OpenReadStream(LegacyAccessFilePreviewService.MaxFileBytes);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            var bytes = buffer.ToArray();
+            var catalog = LegacyAccessFilePreviewer.Inspect(file.Name, bytes);
+            pendingAccessBytes = bytes;
+            pendingAccessCatalog = catalog;
+            selectedAccessTable = catalog.Tables[0];
+            message = "Choose one table to preview. No records have been imported.";
+        }
+        catch (LegacyAccessFilePreviewException exception)
+        {
+            message = AccessPreviewError(exception.Code);
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or ArgumentException)
+        {
+            message = "Choose an Access database up to 8 MB.";
+        }
+    }
+
+    private void PreviewLegacyAccessTable()
+    {
+        ClearLegacyCsvPreview();
+        if (pendingAccessCatalog is null || pendingAccessBytes is null) return;
+        try
+        {
+            pendingLegacyCsv = LegacyAccessFilePreviewer.Preview(
+                pendingAccessCatalog.FileName, pendingAccessBytes, selectedAccessTable);
+            legacyColumnDrafts = pendingLegacyCsv.Columns.Select(column => new LegacyColumnDraft { Column = column }).ToList();
+            message = "Review the table columns and sample records before mapping.";
+        }
+        catch (LegacyAccessFilePreviewException exception)
+        {
+            message = AccessPreviewError(exception.Code);
+        }
+    }
+
+    private static string AccessPreviewError(string code) => code switch
+    {
+        "SIZE_LIMIT" => "Choose an Access database up to 8 MB.",
+        "TABLE_LIMIT_OR_EMPTY" => "This database has no readable local tables or exceeds the 100-table limit.",
+        "ROW_LIMIT_OR_EMPTY" => "Choose a table with 1 to 5,000 records.",
+        "COLUMNS" or "ROW_LIMIT_OR_FORMAT" => "This table exceeds the 40-column or cell-size limit, or has unreadable values.",
+        _ => "This Access database could not be previewed. Try exporting the table as CSV."
+    };
+
+    private void ClearAccessSelection()
+    {
+        pendingAccessCatalog = null;
+        pendingAccessBytes = null;
+        selectedAccessTable = "";
     }
 
     private void ClearLegacyCsvPreview()
@@ -772,7 +852,7 @@
             message = exception.Code switch
             {
                 "EVIDENCE_MAPPING" => "For evidence import, map exactly one column to Evidence claim and ignore the others.",
-                "CLAIM_LENGTH" => "An evidence claim exceeds 240 characters. Edit the CSV before importing it.",
+                "CLAIM_LENGTH" => "An evidence claim exceeds 240 characters. Edit the source record before importing it.",
                 "NO_CLAIMS" => "The mapped column has no nonempty evidence claims.",
                 _ => "Check the evidence mapping and try again."
             };
@@ -796,11 +876,11 @@
             legacyProfileImportPlan = null;
             message = exception.Code switch
             {
-                "PROFILE_ROW_COUNT" => "Profile import needs exactly one CSV record. Export one applicant record and try again.",
+                "PROFILE_ROW_COUNT" => "Profile import needs exactly one record. Select or export one applicant record and try again.",
                 "PROFILE_MAPPING" => "For profile import, map only profile fields and ignore evidence claims.",
-                "PROFILE_LENGTH" => "A mapped profile value is too long. Edit the CSV before importing it.",
-                "PROFILE_EMAIL" => "The mapped email address is invalid. Edit the CSV before importing it.",
-                _ => "No nonempty profile fields were mapped. Check the CSV and mapping."
+                "PROFILE_LENGTH" => "A mapped profile value is too long. Edit the source record before importing it.",
+                "PROFILE_EMAIL" => "The mapped email address is invalid. Edit the source record before importing it.",
+                _ => "No nonempty profile fields were mapped. Check the source record and mapping."
             };
         }
     }
@@ -813,6 +893,7 @@
         {
             await ProfileImporter.ImportAsync(userId, legacyProfileImportPlan);
             pendingLegacyCsv = null;
+            ClearAccessSelection();
             legacyMappedPreview = null;
             legacyImportPlan = null;
             legacyProfileImportPlan = null;
@@ -826,8 +907,8 @@
             message = exception.Code switch
             {
                 "PROFILE_REQUIRED" => "Save your profile before importing these fields.",
-                "PROFILE_INVALID" => "The proposed changes would make your profile invalid. Review your profile and CSV.",
-                _ => "The profile import plan is no longer valid. Preview the CSV again."
+                "PROFILE_INVALID" => "The proposed changes would make your profile invalid. Review your profile and source record.",
+                _ => "The profile import plan is no longer valid. Preview the table again."
             };
         }
         finally { legacyImportBusy = false; }
@@ -862,6 +943,7 @@
         {
             var batch = await EvidenceImporter.ImportAsync(userId, legacyImportPlan);
             pendingLegacyCsv = null;
+            ClearAccessSelection();
             legacyMappedPreview = null;
             legacyImportPlan = null;
             legacyProfileImportPlan = null;
@@ -877,7 +959,7 @@
             {
                 "PROFILE_REQUIRED" => "Save your profile before importing evidence.",
                 "CLAIM_EXISTS" => "A proposed claim already exists in your evidence library. Review the CSV and try again.",
-                _ => "The import plan is no longer valid. Preview the CSV again."
+                _ => "The import plan is no longer valid. Preview the table again."
             };
         }
         finally { legacyImportBusy = false; }
