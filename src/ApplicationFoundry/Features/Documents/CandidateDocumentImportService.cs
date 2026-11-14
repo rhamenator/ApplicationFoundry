@@ -60,7 +60,18 @@ public sealed class CandidateDocumentImportService : ICandidateDocumentImportSer
         };
         if (string.IsNullOrWhiteSpace(text) && mediaType == "application/pdf" && pdfOcr is not null)
         {
-            text = await pdfOcr.ExtractTextAsync(bytes, cancellationToken);
+            try
+            {
+                text = await pdfOcr.ExtractTextAsync(bytes, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                throw new DocumentImportException("OCR_FAILED");
+            }
             notes = "OCR text and PDF layout need review";
         }
         if (string.IsNullOrWhiteSpace(text))

@@ -89,6 +89,40 @@ public sealed class CandidateDocumentImportTests
         Assert.Equal("OCR_NO_TEXT", error.Code);
     }
 
+    [Fact]
+    public async Task Reports_ocr_failure_without_exposing_provider_details()
+    {
+        var importerWithOcr = new CandidateDocumentImportService(new FailingPdfOcr());
+        var error = await Assert.ThrowsAsync<DocumentImportException>(() =>
+            importerWithOcr.ExtractAsync("scan.pdf", "resume", documents.ToPdf(" ")));
+        Assert.Equal("OCR_FAILED", error.Code);
+    }
+
+    [Fact]
+    public async Task Preserves_caller_cancellation_during_ocr()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var importerWithOcr = new CandidateDocumentImportService(new CancellingPdfOcr(cancellation));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            importerWithOcr.ExtractAsync("scan.pdf", "resume", documents.ToPdf(" "), cancellation.Token));
+    }
+
+    private sealed class FailingPdfOcr : ICandidatePdfOcr
+    {
+        public Task<string> ExtractTextAsync(byte[] pdfBytes, CancellationToken cancellationToken) =>
+            throw new IOException("Synthetic provider detail");
+    }
+
+    private sealed class CancellingPdfOcr(CancellationTokenSource cancellation) : ICandidatePdfOcr
+    {
+        public Task<string> ExtractTextAsync(byte[] pdfBytes, CancellationToken cancellationToken)
+        {
+            cancellation.Cancel();
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult("");
+        }
+    }
+
     private sealed class SyntheticPdfOcr(string text) : ICandidatePdfOcr
     {
         public int Calls { get; private set; }
