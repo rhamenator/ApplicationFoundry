@@ -9,6 +9,8 @@ public sealed class LegacyAccessFilePreviewTests
         Path.Combine(AppContext.BaseDirectory, "Fixtures", "synthetic-jet4.mdb"));
     private static readonly byte[] SyntheticAceDatabase = File.ReadAllBytes(
         Path.Combine(AppContext.BaseDirectory, "Fixtures", "synthetic-ace12.accdb"));
+    private static readonly byte[] SyntheticJet3Database = File.ReadAllBytes(
+        Path.Combine(AppContext.BaseDirectory, "Fixtures", "synthetic-jet3-jackcess.mdb"));
     private readonly LegacyAccessFilePreviewService previewer = new();
 
     [Fact]
@@ -53,5 +55,18 @@ public sealed class LegacyAccessFilePreviewTests
         Assert.Equal(["Id", "Name", "Email"], preview.Columns);
         Assert.Equal(1, preview.RowCount);
         Assert.Equal(["1", "Avery Example", "avery@example.test"], Assert.Single(preview.SampleRows));
+    }
+
+    [Fact]
+    public void Lists_and_previews_a_synthetic_jet3_table()
+    {
+        var catalog = previewer.Inspect("synthetic-jet3-jackcess.mdb", SyntheticJet3Database);
+        Assert.Equal(["Table1", "Table2", "Table3", "Table4"], catalog.Tables);
+
+        var preview = previewer.Preview(catalog.FileName, SyntheticJet3Database, "Table1");
+        Assert.Equal(["A", "B", "C", "D", "E", "F", "G", "H", "I"], preview.Columns);
+        Assert.Equal(2, preview.RowCount);
+        Assert.Equal("a", preview.SampleRows[0][0]);
+        Assert.Equal("b", preview.SampleRows[0][1]);
     }
 }

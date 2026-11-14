@@ -65,8 +65,9 @@ than later launches while Windows finishes setting up the user profile.
 ## Bring Access records over
 
 Choose a local `.mdb` or `.accdb` file up to 8 MB in the studio, then select
-one table to preview. Jet 4 `.mdb` and ACE 12 `.accdb` synthetic files have
-passed parser checks; Jet 3 and other ACE versions still need acceptance.
+one table to preview. Synthetic Jet 3 and Jet 4 `.mdb` and ACE 12 `.accdb`
+files have passed parser checks; other ACE versions and Windows GUI checks for
+Jet 3 and ACE 12 still need acceptance.
 Password-protected databases may need a CSV export. To export, use Access's
 **Export → Text File**, choose a comma delimiter, and include field names in
 the first row. [Microsoft's Access export guide](https://support.microsoft.com/en-us/access/export-data-to-a-text-file)
