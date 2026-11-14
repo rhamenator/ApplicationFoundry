@@ -8,6 +8,12 @@ applicant's database.
 - `synthetic-ace12.accdb` was created locally with Jackcess Java 5.0.4 using
   `Database.FileFormat.V2007`. Jackcess identifies it as ACE 12. Its sole
   `Applicants` row has the same artificial values.
+- `synthetic-v2010.accdb`, `synthetic-v2016.accdb`, and
+  `synthetic-v2019.accdb` were created locally with Jackcess Java 5.0.4 using
+  the matching `Database.FileFormat` values. Each has the same one-row
+  artificial `Applicants` table. These samples check parser compatibility
+  across additional Access file formats; they do not represent every feature
+  or encoding used by real databases.
 - `synthetic-jet3-jackcess.mdb` is the unmodified artificial
   [`testV1997.mdb`](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/test/data/V1997/testV1997.mdb)
   fixture from Jackcess. It has generic `Table1` through `Table4` test tables.

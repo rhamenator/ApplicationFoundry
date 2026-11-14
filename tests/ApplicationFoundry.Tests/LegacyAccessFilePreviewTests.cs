@@ -57,6 +57,23 @@ public sealed class LegacyAccessFilePreviewTests
         Assert.Equal(["1", "Avery Example", "avery@example.test"], Assert.Single(preview.SampleRows));
     }
 
+    [Theory]
+    [InlineData("synthetic-v2010.accdb")]
+    [InlineData("synthetic-v2016.accdb")]
+    [InlineData("synthetic-v2019.accdb")]
+    public void Lists_and_previews_newer_synthetic_access_tables(string fileName)
+    {
+        var bytes = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", fileName));
+        var catalog = previewer.Inspect(fileName, bytes);
+        Assert.Equal(["Applicants"], catalog.Tables);
+        Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(bytes)), catalog.SourceSha256);
+
+        var preview = previewer.Preview(fileName, bytes, "Applicants");
+        Assert.Equal(["Id", "Name", "Email"], preview.Columns);
+        Assert.Equal(1, preview.RowCount);
+        Assert.Equal(["1", "Avery Example", "avery@example.test"], Assert.Single(preview.SampleRows));
+    }
+
     [Fact]
     public void Lists_and_previews_a_synthetic_jet3_table()
     {
