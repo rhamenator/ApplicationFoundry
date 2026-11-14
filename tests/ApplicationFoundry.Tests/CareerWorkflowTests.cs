@@ -100,7 +100,7 @@ public sealed class CareerWorkflowTests
                 Keywords = "review"
             }
         ];
-        var job = new JobOpportunity { RoleTitle = "QA specialist", Description = "Review workflows" };
+        var job = new JobOpportunity { RoleTitle = "QA specialist", Organization = "Example Labs", Description = "Review workflows" };
         var service = new CareerDocumentService();
 
         var resume = service.DraftResume(profile, job);
@@ -109,8 +109,47 @@ public sealed class CareerWorkflowTests
         Assert.Contains("Avery Rivera\navery@example.test\n\nPROFILE", resume);
         Assert.Contains("• Reviewed synthetic application workflows and documented repeatable results.", resume);
         Assert.DoesNotContain("workflows.:", resume);
-        Assert.Contains("Relevant evidence includes Reviewed synthetic application workflows.", letter);
+        Assert.Contains("Avery Rivera\navery@example.test\n\nDear Hiring Team,", letter);
+        Assert.Contains("I am applying for the QA specialist position at Example Labs.", letter);
+        Assert.Contains("Relevant experience\n• Reviewed synthetic application workflows and documented repeatable results.", letter);
         Assert.DoesNotContain("workflows..", letter);
+        Assert.DoesNotContain("workflows.:", letter);
+    }
+
+    [Fact]
+    public void Cover_letter_omits_empty_optional_sections()
+    {
+        var profile = Profile();
+        profile.Email = "";
+        profile.Phone = "";
+        profile.Summary = "";
+        profile.Evidence = [];
+
+        var letter = new CareerDocumentService().DraftCoverLetter(profile,
+            new JobOpportunity { RoleTitle = "QA specialist", Description = "Test workflows" });
+
+        Assert.StartsWith("Avery Rivera\n\nDear Hiring Team,", letter);
+        Assert.Contains("I am applying for the QA specialist position.", letter);
+        Assert.DoesNotContain("Relevant experience", letter);
+        Assert.DoesNotContain(" | ", letter);
+    }
+
+    [Fact]
+    public void Cover_letter_pdf_retains_organization_and_evidence_with_styled_name()
+    {
+        var service = new CareerDocumentService();
+        var letter = service.DraftCoverLetter(Profile(), new JobOpportunity
+        {
+            RoleTitle = "Reliability engineer",
+            Organization = "Example Labs",
+            Description = "Rust reliability"
+        });
+
+        using var pdf = PdfDocument.Open(service.ToPdf(letter));
+        var page = pdf.GetPage(1);
+        Assert.Contains("Reliability engineer position at Example Labs", page.Text);
+        Assert.Contains("Reduced service latency", page.Text);
+        Assert.True(page.Letters.First().FontSize > page.Letters.Min(item => item.FontSize));
     }
 
     [Fact]

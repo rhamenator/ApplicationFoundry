@@ -32,10 +32,18 @@ public sealed class CareerDocumentService : ICareerDocumentService
         var examples = profile.Evidence
             .OrderByDescending(item => KeywordHits(item, job.Description))
             .Take(3)
-            .Select(item => item.Claim.Trim().TrimEnd('.', '!', '?'));
-        var examplesText = string.Join("; ", examples);
-        var evidenceParagraph = string.IsNullOrEmpty(examplesText) ? "" : $"\n\nRelevant evidence includes {examplesText}.";
-        return $"Dear Hiring Team,\n\nI am interested in the {job.RoleTitle} opportunity. {profile.Summary}{evidenceParagraph}\n\nI would welcome a conversation about the role.\n\nSincerely,\n{profile.DisplayName}";
+            .Select(item => $"• {FormatEvidence(item)}")
+            .ToArray();
+        var contact = string.Join(" | ", new[] { profile.Email, profile.Phone }
+            .Where(value => !string.IsNullOrWhiteSpace(value)));
+        var header = string.IsNullOrEmpty(contact) ? profile.DisplayName : $"{profile.DisplayName}\n{contact}";
+        var organization = string.IsNullOrWhiteSpace(job.Organization) ? "" : $" at {job.Organization.Trim()}";
+        var summary = profile.Summary.Trim();
+        if (summary.Length > 0 && !".!?".Contains(summary[^1])) summary += ".";
+        var introduction = $"I am applying for the {job.RoleTitle.Trim()} position{organization}.";
+        if (summary.Length > 0) introduction += $" {summary}";
+        var evidenceSection = examples.Length == 0 ? "" : $"\n\nRelevant experience\n{string.Join('\n', examples)}";
+        return $"{header}\n\nDear Hiring Team,\n\n{introduction}{evidenceSection}\n\nI would welcome the opportunity to discuss this position.\n\nSincerely,\n{profile.DisplayName}";
     }
 
     private static string FormatEvidence(EvidenceItem item)
@@ -57,9 +65,11 @@ public sealed class CareerDocumentService : ICareerDocumentService
         {
             WriteEntry(archive, "[Content_Types].xml", "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/></Types>");
             WriteEntry(archive, "_rels/.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/></Relationships>");
-            var isResume = content.Contains("\nPROFILE\n", StringComparison.Ordinal);
-            var paragraphs = string.Join("", content.Replace("\r", "").Split('\n')
-                .Select((line, index) => ToDocxParagraph(line, index, isResume)));
+            var normalized = content.Replace("\r", "");
+            var isResume = normalized.Contains("\nPROFILE\n", StringComparison.Ordinal);
+            var isCoverLetter = normalized.Contains("\nDear Hiring Team,\n", StringComparison.Ordinal);
+            var paragraphs = string.Join("", normalized.Split('\n')
+                .Select((line, index) => ToDocxParagraph(line, index, isResume, isCoverLetter)));
             WriteEntry(archive, "word/document.xml", $"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body>{paragraphs}<w:sectPr/></w:body></w:document>");
         }
         return output.ToArray();
@@ -69,8 +79,9 @@ public sealed class CareerDocumentService : ICareerDocumentService
     {
         var normalized = content.Replace("\r", "");
         var isResume = normalized.Contains("\nPROFILE\n", StringComparison.Ordinal);
+        var isCoverLetter = normalized.Contains("\nDear Hiring Team,\n", StringComparison.Ordinal);
         var groups = normalized.Split('\n')
-            .Select((line, index) => WrapPdfLine(line, isResume && index == 0 ? 33_600 : 50_400)
+            .Select((line, index) => WrapPdfLine(line, (isResume || isCoverLetter) && index == 0 ? 33_600 : 50_400)
                 .Select(part => EscapePdf(ToWinAnsi(part))).ToArray());
         var pages = PaginatePdfLines(groups);
         var fontId = 3 + pages.Length * 2;
@@ -87,8 +98,8 @@ public sealed class CareerDocumentService : ICareerDocumentService
             for (var lineIndex = 0; lineIndex < pages[pageIndex].Length; lineIndex++)
             {
                 var line = pages[pageIndex][lineIndex];
-                var name = isResume && pageIndex == 0 && lineIndex == 0;
-                var heading = isResume && IsSectionHeading(line);
+                var name = (isResume || isCoverLetter) && pageIndex == 0 && lineIndex == 0;
+                var heading = isResume && IsSectionHeading(line) || isCoverLetter && line == "Relevant experience";
                 body.Append(name || heading ? "BT /F2 " : "BT /F1 ")
                     .Append(name ? "15" : heading ? "11" : "10")
                     .Append(" Tf 54 ").Append(baseline).Append(" Td (")
@@ -128,11 +139,11 @@ public sealed class CareerDocumentService : ICareerDocumentService
         writer.Write(content);
     }
 
-    private static string ToDocxParagraph(string line, int index, bool isResume)
+    private static string ToDocxParagraph(string line, int index, bool isResume, bool isCoverLetter)
     {
-        var name = isResume && index == 0;
-        var heading = isResume && IsSectionHeading(line);
-        var bullet = isResume && line.StartsWith("• ", StringComparison.Ordinal);
+        var name = (isResume || isCoverLetter) && index == 0;
+        var heading = isResume && IsSectionHeading(line) || isCoverLetter && line == "Relevant experience";
+        var bullet = (isResume || isCoverLetter) && line.StartsWith("• ", StringComparison.Ordinal);
         var paragraph = name
             ? "<w:pPr><w:spacing w:after=\"80\"/></w:pPr>"
             : heading
