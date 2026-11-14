@@ -87,6 +87,33 @@ public sealed class CareerWorkflowTests
     }
 
     [Fact]
+    public void Drafts_avoid_empty_contact_separators_and_repeated_evidence()
+    {
+        var profile = Profile();
+        profile.Phone = "";
+        profile.Evidence =
+        [
+            new EvidenceItem
+            {
+                Claim = "Reviewed synthetic application workflows.",
+                Details = "Reviewed synthetic application workflows and documented repeatable results.",
+                Keywords = "review"
+            }
+        ];
+        var job = new JobOpportunity { RoleTitle = "QA specialist", Description = "Review workflows" };
+        var service = new CareerDocumentService();
+
+        var resume = service.DraftResume(profile, job);
+        var letter = service.DraftCoverLetter(profile, job);
+
+        Assert.Contains("Avery Rivera\navery@example.test\n\nPROFILE", resume);
+        Assert.Contains("• Reviewed synthetic application workflows and documented repeatable results.", resume);
+        Assert.DoesNotContain("workflows.:", resume);
+        Assert.Contains("Relevant evidence includes Reviewed synthetic application workflows.", letter);
+        Assert.DoesNotContain("workflows..", letter);
+    }
+
+    [Fact]
     public void Docx_is_a_valid_open_xml_package()
     {
         var bytes = new CareerDocumentService().ToDocx("Avery Rivera\nEvidence-based draft");

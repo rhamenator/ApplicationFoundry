@@ -20,8 +20,11 @@ public sealed class CareerDocumentService : ICareerDocumentService
         var evidence = profile.Evidence
             .OrderByDescending(item => KeywordHits(item, job.Description))
             .Take(8)
-            .Select(item => $"• {item.Claim}{(string.IsNullOrWhiteSpace(item.Details) ? "" : $": {item.Details}")}");
-        return $"{profile.DisplayName}\n{profile.Email} | {profile.Phone}\n\nPROFILE\n{profile.Summary}\n\nSELECTED EVIDENCE\n{string.Join('\n', evidence)}";
+            .Select(item => $"• {FormatEvidence(item)}");
+        var contact = string.Join(" | ", new[] { profile.Email, profile.Phone }
+            .Where(value => !string.IsNullOrWhiteSpace(value)));
+        var header = string.IsNullOrEmpty(contact) ? profile.DisplayName : $"{profile.DisplayName}\n{contact}";
+        return $"{header}\n\nPROFILE\n{profile.Summary}\n\nSELECTED EVIDENCE\n{string.Join('\n', evidence)}";
     }
 
     public string DraftCoverLetter(CandidateProfile profile, JobOpportunity job)
@@ -29,8 +32,22 @@ public sealed class CareerDocumentService : ICareerDocumentService
         var examples = profile.Evidence
             .OrderByDescending(item => KeywordHits(item, job.Description))
             .Take(3)
-            .Select(item => item.Claim);
-        return $"Dear Hiring Team,\n\nI am interested in the {job.RoleTitle} opportunity. {profile.Summary}\n\nRelevant evidence includes {string.Join("; ", examples)}.\n\nI would welcome a conversation about the role.\n\nSincerely,\n{profile.DisplayName}";
+            .Select(item => item.Claim.Trim().TrimEnd('.', '!', '?'));
+        var examplesText = string.Join("; ", examples);
+        var evidenceParagraph = string.IsNullOrEmpty(examplesText) ? "" : $"\n\nRelevant evidence includes {examplesText}.";
+        return $"Dear Hiring Team,\n\nI am interested in the {job.RoleTitle} opportunity. {profile.Summary}{evidenceParagraph}\n\nI would welcome a conversation about the role.\n\nSincerely,\n{profile.DisplayName}";
+    }
+
+    private static string FormatEvidence(EvidenceItem item)
+    {
+        var claim = item.Claim.Trim();
+        var details = item.Details.Trim();
+        if (details.Length == 0) return claim;
+        var plainClaim = claim.TrimEnd('.', '!', '?');
+        if (details.StartsWith(plainClaim, StringComparison.OrdinalIgnoreCase) &&
+            (details.Length == plainClaim.Length || !char.IsLetterOrDigit(details[plainClaim.Length])))
+            return details;
+        return $"{plainClaim}: {details}";
     }
 
     public byte[] ToDocx(string content)
