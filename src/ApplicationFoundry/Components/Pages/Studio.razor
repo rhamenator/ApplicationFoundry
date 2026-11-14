@@ -4,6 +4,17 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IFitScorer FitScorer
 @inject ICareerDocumentService Documents
+@inject ICandidateDocumentImportService DocumentImporter
+@inject LegacyAccessCsvPreviewService LegacyCsvPreviewer
+@inject LegacyAccessFilePreviewService LegacyAccessFilePreviewer
+@inject LegacyEvidenceImportService EvidenceImporter
+@inject LegacyProfileImportService ProfileImporter
+@inject IClientDocumentExport ClientExport
+@inject IJobDiscoveryService JobDiscovery
+@inject GreenhouseJobDiscoveryService GreenhouseDiscovery
+@inject LeverJobDiscoveryService LeverDiscovery
+@inject ArbeitnowJobDiscoveryService ArbeitnowDiscovery
+@inject IJSRuntime JS
 
 <PageTitle>Career studio</PageTitle>
 
@@ -56,7 +67,286 @@
 </section>
 
 <section class="studio-panel">
-    <h2>Import an opportunity</h2>
+    <h2>Import your documents</h2>
+    <p>Bring in a TXT, DOCX, or text-based PDF résumé, cover letter, or other source document (up to 2 MB). Review the extracted text before saving it. The original file stays on your computer.</p>
+    <label>Document type
+        <select class="form-select" @bind="sourceKind">
+            <option value="resume">Résumé</option>
+            <option value="cover-letter">Cover letter</option>
+            <option value="other">Other</option>
+        </select>
+    </label>
+    <InputFile OnChange="PreviewSourceDocumentAsync" accept=".txt,.docx,.pdf" />
+    @if (pendingSource is not null)
+    {
+        <div class="mt-3">
+            <h3>Review @pendingSource.FileName</h3>
+            @if (!string.IsNullOrEmpty(pendingSource.ReviewNotes))
+            {
+                <p class="text-warning">Extraction notes: @pendingSource.ReviewNotes. Check the text against the original.</p>
+            }
+            <pre class="document-preview">@pendingSource.ExtractedText</pre>
+            <button class="btn btn-primary" type="button" @onclick="SaveSourceDocumentAsync">Save imported text</button>
+        </div>
+    }
+    @foreach (var source in sourceDocuments)
+    {
+        <details class="mt-3">
+            <summary>@source.FileName · @source.Kind · imported @source.ImportedAt.ToLocalTime().ToString("g")</summary>
+            @if (!string.IsNullOrEmpty(source.ReviewNotes))
+            {
+                <p class="text-warning">Extraction notes: @source.ReviewNotes</p>
+            }
+            <pre class="document-preview">@source.ExtractedText</pre>
+            <button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => ReviewSourceFacts(source)">Review suggested facts</button>
+        </details>
+    }
+    @if (mappingSourceId != 0)
+    {
+        <div class="mt-3">
+            <h3>Review facts from @mappingSourceName</h3>
+            <p>These are suggestions from the imported text. Edit them before using them; check every claim against the original document.</p>
+            <div class="profile-grid">
+                <label>Suggested email<input class="form-control" @bind="mappingEmail" /></label>
+                <label>Suggested phone<input class="form-control" @bind="mappingPhone" /></label>
+            </div>
+            <label>Suggested professional summary<textarea class="form-control" rows="4" @bind="mappingSummary"></textarea></label>
+            <button class="btn btn-outline-primary mt-2" type="button" @onclick="ApplyProfileSuggestions">Use in profile draft</button>
+            <p class="text-secondary">Profile changes are saved when you select Save profile above.</p>
+            <h4>Possible evidence claims</h4>
+            @if (mappingClaims.Count == 0)
+            {
+                <p>No bullet claims were found. You can still add evidence manually above.</p>
+            }
+            @foreach (var suggestion in mappingClaims)
+            {
+                <div class="mt-3">
+                    <label>Evidence claim<input class="form-control" @bind="suggestion.Claim" /></label>
+                    <div class="profile-grid">
+                        <label>Kind<input class="form-control" @bind="suggestion.Kind" /></label>
+                        <label>Keywords (comma separated)<input class="form-control" @bind="suggestion.Keywords" /></label>
+                    </div>
+                    <label>Details<textarea class="form-control" rows="2" @bind="suggestion.Details"></textarea></label>
+                    <button class="btn btn-sm btn-outline-primary mt-1" type="button" disabled="@(profile.Id == 0 || suggestion.Added)" @onclick="() => AddSuggestedEvidenceAsync(suggestion)">@(suggestion.Added ? "Added" : "Add to evidence")</button>
+                </div>
+            }
+            @if (profile.Id == 0 && mappingClaims.Count > 0)
+            {
+                <p>Save the profile before adding evidence claims.</p>
+            }
+        </div>
+    }
+</section>
+
+<section class="studio-panel">
+    <h2>Preview an Access table</h2>
+    <p>Choose a local Access database up to 8 MB, then select one table to preview. A private temporary copy is removed after each read; the upload stays in memory while you review it. Password-protected databases may need a CSV export.</p>
+    <InputFile OnChange="InspectLegacyAccessAsync" accept=".mdb,.accdb" />
+    @if (pendingAccessCatalog is not null)
+    {
+        <label class="mt-2">Table
+            <select class="form-select" @bind="selectedAccessTable" @bind:after="ClearLegacyCsvPreview">
+                @foreach (var tableName in pendingAccessCatalog.Tables)
+                {
+                    <option value="@tableName">@tableName</option>
+                }
+            </select>
+        </label>
+        <button class="btn btn-outline-primary mt-2" type="button" @onclick="PreviewLegacyAccessTable">Preview selected table</button>
+    }
+    <h3 class="mt-3">Or use an Access table export</h3>
+    <p>In Access, export one table or query as comma-delimited text with field names in the first row. Choose the text encoding used by the export below. <a href="https://support.microsoft.com/en-us/access/export-data-to-a-text-file" target="_blank" rel="noopener noreferrer">Microsoft's export steps</a> explain the wizard. Export one record for profile fields or up to 5,000 records for evidence. This preview stays in memory.</p>
+    <label>CSV text encoding
+        <select class="form-select" @bind="legacyCsvEncoding" @bind:after="ClearLegacyCsvPreview">
+            <option value="utf8">UTF-8</option>
+            <option value="utf16-le">UTF-16 little-endian</option>
+            <option value="windows-1252">Windows-1252 (older Western European exports)</option>
+        </select>
+    </label>
+    <InputFile OnChange="PreviewLegacyCsvAsync" accept=".csv,.txt" />
+    @if (pendingLegacyCsv is not null)
+    {
+        <div class="mt-3">
+            <h3>@pendingLegacyCsv.FileName · @pendingLegacyCsv.RowCount records</h3>
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead><tr>@foreach (var column in pendingLegacyCsv.Columns) { <th>@column</th> }</tr></thead>
+                    <tbody>
+                        @foreach (var row in pendingLegacyCsv.SampleRows)
+                        {
+                            <tr>@foreach (var value in row) { <td>@value</td> }</tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <h4>Map source columns</h4>
+            <p>Choose at most one source column for each destination field, then preview the mapped sample. No records are saved.</p>
+            <div class="profile-grid">
+                @foreach (var draft in legacyColumnDrafts)
+                {
+                    <label>@draft.Column
+                        <select class="form-select" @bind="draft.Target" @bind:after="ClearLegacyMappingPreview">
+                            <option value="">Ignore</option>
+                            <option value="title">Title</option>
+                            <option value="first-name">First name</option>
+                            <option value="middle-initials">Middle initials</option>
+                            <option value="last-name">Last name</option>
+                            <option value="suffix">Suffix</option>
+                            <option value="preferred-display-name">Preferred display name</option>
+                            <option value="email">Email</option>
+                            <option value="phone">Phone</option>
+                            <option value="summary">Professional summary</option>
+                            <option value="evidence-claim">Evidence claim</option>
+                        </select>
+                    </label>
+                }
+            </div>
+            <button class="btn btn-outline-primary mt-2" type="button" @onclick="PreviewLegacyMapping">Preview mapping</button>
+            @if (legacyMappedPreview is not null)
+            {
+                <div class="table-responsive mt-3">
+                    <table class="table table-sm">
+                        <thead><tr>@foreach (var target in legacyMappedPreview.TargetFields) { <th>@target</th> }</tr></thead>
+                        <tbody>
+                            @foreach (var row in legacyMappedPreview.SampleRows)
+                            {
+                                <tr>@foreach (var target in legacyMappedPreview.TargetFields) { <td>@row[target]</td> }</tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <button class="btn btn-outline-primary mt-2" type="button" @onclick="PrepareLegacyEvidenceImport">Prepare evidence import</button>
+                <button class="btn btn-outline-primary mt-2 ms-2" type="button" @onclick="PrepareLegacyProfileImport">Prepare profile import</button>
+            }
+            @if (legacyProfileImportPlan is not null)
+            {
+                <p class="mt-3">Proposed changes to your saved profile from one record:</p>
+                <ul>@foreach (var field in legacyProfileImportPlan.Fields) { <li>@field.Key: @field.Value</li> }</ul>
+                <label class="mt-2"><input type="checkbox" @bind="legacyProfileImportConfirmed" /> I reviewed these profile changes and want to save them.</label>
+                <button class="btn btn-primary mt-2" type="button" disabled="@(!legacyProfileImportConfirmed || profile.Id == 0 || legacyImportBusy)" @onclick="ImportLegacyProfileAsync">Import profile fields</button>
+            }
+            @if (legacyImportPlan is not null)
+            {
+                <p class="mt-3">Ready for review: @legacyImportPlan.Claims.Count unique evidence claims; @legacyImportPlan.EmptyOrDuplicateRows empty or duplicate rows skipped.</p>
+                <details>
+                    <summary>Review all @legacyImportPlan.Claims.Count claims before importing</summary>
+                    <ol>@foreach (var claim in legacyImportPlan.Claims) { <li>@claim</li> }</ol>
+                </details>
+                <label class="mt-2"><input type="checkbox" @bind="legacyImportConfirmed" /> I reviewed every claim and want to add this batch to my evidence library.</label>
+                <button class="btn btn-primary mt-2" type="button" disabled="@(!legacyImportConfirmed || profile.Id == 0 || legacyImportBusy)" @onclick="ImportLegacyEvidenceAsync">Import @legacyImportPlan.Claims.Count claims</button>
+            }
+        </div>
+    }
+    @if (legacyImportBatches.Count > 0)
+    {
+        <h3 class="mt-3">Imported evidence batches</h3>
+        <ul>
+            @foreach (var batch in legacyImportBatches)
+            {
+                <li>@batch.FileName · @batch.ClaimCount claims · @batch.ImportedAt.ToLocalTime().ToString("g")
+                    <button class="btn btn-sm btn-outline-danger" type="button" disabled="@legacyImportBusy" @onclick="() => UndoLegacyEvidenceImportAsync(batch.Id)">Undo this import</button>
+                </li>
+            }
+        </ul>
+    }
+    @if (legacyProfileImportBatches.Count > 0)
+    {
+        <h3 class="mt-3">Imported profile changes</h3>
+        <ul>
+            @foreach (var batch in legacyProfileImportBatches)
+            {
+                <li>@batch.FileName · @batch.ImportedAt.ToLocalTime().ToString("g")
+                    <button class="btn btn-sm btn-outline-danger" type="button" disabled="@legacyImportBusy" @onclick="() => UndoLegacyProfileAsync(batch.Id)">Undo these changes</button>
+                </li>
+            }
+        </ul>
+    }
+</section>
+
+<section class="studio-panel">
+    <h2>Find matching jobs</h2>
+    <p>Compare current postings with your saved evidence on this computer. Your profile is not sent to the job board.</p>
+    <label>Employer board or posting URL (optional)<input class="form-control" type="url" @bind="employerBoardUrl" placeholder="https://boards.greenhouse.io/example or https://jobs.lever.co/example" /></label>
+    <button class="btn btn-sm btn-outline-secondary mt-2" type="button" @onclick="UseEmployerBoardUrl">Use this board</button>
+    <p class="text-secondary">Paste a Greenhouse or Lever link to fill in its source, site token, and region. Check the employer name before searching.</p>
+    <label>Job source
+        <select class="form-select" @bind="searchSource">
+            <option value="remoteok">Remote OK (remote roles)</option>
+            <option value="arbeitnow">Arbeitnow (Europe and UK)</option>
+            <option value="greenhouse">Greenhouse employer board</option>
+            <option value="lever">Lever employer site</option>
+            <option value="all">Remote OK, Arbeitnow, and selected employer boards</option>
+        </select>
+    </label>
+    @if (searchSource == "greenhouse" || searchSource == "all")
+    {
+        <div class="profile-grid">
+            <label>Employer name<input class="form-control" @bind="greenhouseEmployer" /></label>
+            <label>Greenhouse board token<input class="form-control" @bind="greenhouseBoardToken" /></label>
+        </div>
+        <p class="text-secondary">Use the final segment of the employer's Greenhouse board URL as its token. The employer name and token identify the board; your profile and filters stay local.</p>
+    }
+    @if (searchSource == "lever" || searchSource == "all")
+    {
+        <div class="profile-grid">
+            <label>Employer name<input class="form-control" @bind="leverEmployer" /></label>
+            <label>Lever site token<input class="form-control" @bind="leverSiteToken" /></label>
+            <label>Site region
+                <select class="form-select" @bind="leverRegion">
+                    <option value="global">Global</option>
+                    <option value="eu">EU</option>
+                </select>
+            </label>
+        </div>
+        <p class="text-secondary">Use the employer's Lever site name from its jobs.lever.co or jobs.eu.lever.co URL. Your profile and filters stay local.</p>
+    }
+    @if (searchSource == "greenhouse" || searchSource == "lever" || searchSource == "all" || searchSource == "arbeitnow")
+    {
+        <label>Location contains (optional, employer boards and Arbeitnow only)<input class="form-control" @bind="searchLocation" /></label>
+    }
+    @if (searchSource == "arbeitnow")
+    {
+        <label>Arbeitnow region
+            <select class="form-select" @bind="arbeitnowRegion"><option value="europe">Europe</option><option value="uk">UK</option></select>
+        </label>
+    }
+    @if (searchSource == "all")
+    {
+        <p class="text-secondary">Remote OK, Arbeitnow Europe and UK, and any employer boards entered above are searched together; a source failure will not hide results from the others.</p>
+    }
+    <div class="profile-grid">
+        <label>Required keywords (comma separated)<input class="form-control" @bind="searchKeywords" /></label>
+        <label>Minimum local fit
+            <select class="form-select" @bind="minimumSearchFitPercent">
+                <option value="0">Any fit</option>
+                <option value="25">25%</option>
+                <option value="50">50%</option>
+                <option value="75">75%</option>
+            </select>
+        </label>
+    </div>
+    <p class="text-secondary">All keywords must appear in the posting. Filters are applied on this computer.</p>
+    <button class="btn btn-primary" type="button" disabled="@(isSearching || profile.Id == 0 || profile.Evidence.Count == 0 || (searchSource == "greenhouse" && (string.IsNullOrWhiteSpace(greenhouseEmployer) || string.IsNullOrWhiteSpace(greenhouseBoardToken))) || (searchSource == "lever" && (string.IsNullOrWhiteSpace(leverEmployer) || string.IsNullOrWhiteSpace(leverSiteToken))) || (searchSource == "all" && !CanSearchAll))" @onclick="SearchJobsAsync">
+        @(isSearching ? "Searching…" : "Find matching jobs")
+    </button>
+    @if (profile.Id == 0 || profile.Evidence.Count == 0)
+    {
+        <p class="text-secondary mt-2">Save a profile and at least one evidence item to search.</p>
+    }
+    @foreach (var result in discoveredJobs)
+    {
+        <article class="job-card mt-3">
+            <div><h3>@result.RoleTitle</h3><p>@result.Organization @if (!string.IsNullOrWhiteSpace(result.Location)) { <span>· @result.Location</span> }</p></div>
+            <div class="fit-score"><strong>@result.FitScore.ToString("P0")</strong><span>local fit signal</span></div>
+            <p class="fit-explanation">@result.FitExplanation</p>
+            <p><a href="@result.SourceUrl" target="_blank" rel="noopener noreferrer">View original posting on @result.SourceName</a></p>
+            <button class="btn btn-sm btn-primary" type="button" @onclick="() => DraftDiscoveredJobAsync(result)">Create drafts for this job</button>
+        </article>
+    }
+</section>
+
+<section class="studio-panel">
+    <h2>Import another opportunity</h2>
     <p>Paste a posting or use this browser-assist bookmarklet on a job page, then paste the copied text here:</p>
     <a class="bookmarklet" href="javascript:(()=>navigator.clipboard.writeText(document.title+'%0A'+location.href+'%0A%0A'+getSelection().toString()))()">Copy selected job</a>
     <EditForm Model="newJob" OnValidSubmit="AddJobAsync" FormName="job">
@@ -90,11 +380,170 @@
                     }
                     else
                     {
-                        <a href="@($"/documents/{document.Id}/docx")">DOCX</a><span> · </span><a href="@($"/documents/{document.Id}/pdf")">PDF</a>
+                        @if (ClientExport.IsAvailable)
+                        {
+                            <button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => ExportDocxAsync(document.Id)">Save DOCX</button>
+                            <span> · </span>
+                            <button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => ExportPdfAsync(document.Id)">Save PDF</button>
+                        }
+                        else
+                        {
+                            <a href="@($"/documents/{document.Id}/docx")">DOCX</a><span> · </span><a href="@($"/documents/{document.Id}/pdf")">PDF</a>
+                        }
                     }
                 </details>
             }
+            <details class="mt-2">
+                <summary>Application form preparation · @(job.FormPlan is null ? "not started" : job.FormPlan.Mode.ToString())</summary>
+                <p class="mt-2">Prepare answers for this employer's form and choose your submission preference. The browser helper can fill exact values after your authorization; it never submits the form.</p>
+                <label>Submission preference
+                    <select class="form-select" @bind="formDrafts[job.Id].Mode">
+                        <option value="SubmitPersonally">Review and submit personally</option>
+                        <option value="ApproveEachSubmission">Approve each submission</option>
+                        <option value="AutomaticWithinRules">Automatic submission within my rules</option>
+                    </select>
+                </label>
+                <label>My submission rules<textarea class="form-control" rows="2" @bind="formDrafts[job.Id].Rules"></textarea></label>
+                @if (formDrafts[job.Id].Mode == FormSubmissionMode.AutomaticWithinRules)
+                {
+                    <p class="text-secondary">For the local automatic-rule check, enter one rule per line: <code>organization=Employer name</code> and <code>minimum-fit=50</code>. Other or repeated rules block the check. This check does not inspect or send an employer form.</p>
+                }
+                <button class="btn btn-sm btn-outline-primary mt-2" type="button" @onclick="() => SaveFormPlanAsync(job.Id)">Save preference</button>
+                @if (job.FormPlan?.Mode == FormSubmissionMode.AutomaticWithinRules)
+                {
+                    <button class="btn btn-sm btn-outline-secondary mt-2" type="button" @onclick="() => CheckAutomaticRules(job.Id)">Check automatic rules locally</button>
+                    @if (ruleResults.TryGetValue(job.Id, out var result))
+                    {
+                        <p class="mt-2"><strong>@(result.MatchesLocalRules ? "Local rules match" : "Local rules block this opportunity")</strong> · No employer form was inspected or sent.</p>
+                        @foreach (var reason in result.Reasons)
+                        {
+                            <p>@reason</p>
+                        }
+                    }
+                }
+                <h4 class="mt-3">Prepared answers</h4>
+                @if (job.FormPlan is not null)
+                {
+                    @foreach (var answer in job.FormPlan.Answers.OrderBy(answer => answer.Id))
+                    {
+                        <p><strong>@answer.FieldLabel:</strong> @answer.Answer <span class="text-secondary">· source: @answer.Source · reviewed @answer.ReviewedAt.ToLocalTime().ToString("g")</span></p>
+                    }
+                }
+                <div class="profile-grid">
+                    <label>Form question or field<input class="form-control" @bind="formDrafts[job.Id].FieldLabel" /></label>
+                    <label>Source of this answer<input class="form-control" @bind="formDrafts[job.Id].Source" /></label>
+                </div>
+                <label>Answer<textarea class="form-control" rows="3" @bind="formDrafts[job.Id].Answer"></textarea></label>
+                <div class="mt-2">
+                    <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="() => UseProfileFact(job.Id, ProfileFact.FullName)">Use saved name</button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="() => UseProfileFact(job.Id, ProfileFact.Email)">Use saved email</button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="() => UseProfileFact(job.Id, ProfileFact.Phone)">Use saved phone</button>
+                </div>
+                <button class="btn btn-sm btn-outline-primary mt-2" type="button" @onclick="() => AddPreparedAnswerAsync(job.Id)">Save reviewed answer</button>
+                <h4 class="mt-3">Preview a form match</h4>
+                <p>Drag this link to your browser bookmarks. On the employer's application form, use the bookmark to copy its structure, then paste it below. It reads field labels and choices, never your entered values. The preview stays on this computer and does not enter or send values.</p>
+                <a class="bookmarklet" href="@EmployerFormSnapshotBookmarklet.Href">Copy form structure</a>
+                <details><summary>Form snapshot format</summary><pre>{"url":"https://example.test/apply","fields":[{"key":"email","label":"Email","type":"email","required":true}]}</pre></details>
+                <label>Form snapshot JSON<textarea class="form-control" rows="4" maxlength="65536" @bind="formDrafts[job.Id].SnapshotJson" @bind:event="oninput"></textarea></label>
+                <p class="mt-2">Saved posting: <a href="@job.SourceUrl" target="_blank" rel="noopener noreferrer">@job.SourceUrl</a>. If its application form opens on another site, verify that destination yourself before allowing a fill.</p>
+                <label>Confirmed external form URL (only for a different site)<input class="form-control" type="url" maxlength="2048" @bind="formDrafts[job.Id].ConfirmedExternalFormUrl" @bind:event="oninput" /></label>
+                <label><input type="checkbox" @bind="formDrafts[job.Id].ConfirmExternalForm" /> I checked that this exact external URL is the application form for this saved job.</label>
+                <button class="btn btn-sm btn-outline-secondary mt-2" type="button" @onclick="() => PreviewFormMatch(job.Id)">Preview reviewed answers</button>
+                @if (formDrafts[job.Id].FormPreview is { } preview)
+                {
+                    <p class="mt-2"><strong>@(preview.IsComplete ? "Ready to review" : "Cannot safely match this form")</strong></p>
+                    @foreach (var reason in preview.Reasons)
+                    {
+                        <p>@reason</p>
+                    }
+                    @foreach (var value in preview.Values)
+                    {
+                        <p><strong>@value.Label:</strong> @value.Value</p>
+                    }
+                    @if (preview.IsComplete)
+                    {
+                        <p>Review these exact values before authorizing a fill attempt. Authorization lasts ten minutes and is lost if the form or reviewed packet changes. Authorizing alone does not fill or submit the form.</p>
+                        <button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => AuthorizeFormMatchAsync(job.Id)">Authorize these proposed values</button>
+                        @if (IsFormMatchAuthorized(job))
+                        {
+                            <p class="mt-2">Authorized for this exact form match until @formDrafts[job.Id].FormAuthorization!.AuthorizedAt.Add(FormFillAuthorizer.MaxAge).ToLocalTime().ToString("g"). No values were entered or sent.</p>
+                            <p>Drag this fill link to your browser bookmarks once. Then copy the approved packet and use that bookmark on the same employer form. The clipboard will contain your reviewed answers until replaced. Inspect the filled form before submitting it yourself.</p>
+                            <a class="bookmarklet" href="@EmployerFormFillBookmarklet.Href">Fill approved values</a>
+                            <button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => CopyApprovedFillPacketAsync(job.Id)">Copy approved fill packet</button>
+                        }
+                    }
+                }
+                <h4 class="mt-3">Values entered in the employer form</h4>
+                <p>After the browser helper fills the form, inspect every value on the employer page. Paste its entry receipt here to review and record what was entered. Recording does not submit the form.</p>
+                @if (job.Status != OpportunityStatus.Submitted)
+                {
+                    <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="() => PasteBrowserReceiptAsync(job.Id)">Paste browser receipt from clipboard</button>
+                    <label>Browser entry receipt<textarea class="form-control" rows="3" maxlength="512000" @bind="formDrafts[job.Id].BrowserReceiptJson"></textarea></label>
+                    <button class="btn btn-sm btn-outline-secondary mt-2" type="button" @onclick="() => PreviewBrowserReceiptAsync(job.Id)">Review browser receipt</button>
+                    @if (formDrafts[job.Id].ReceiptPreviewValues is { Count: > 0 } receiptValues)
+                    {
+                        <p class="mt-2">The browser receipt reports these exact values as entered:</p>
+                        @foreach (var value in receiptValues)
+                        {
+                            <p><strong>@value.Label:</strong> @value.Value</p>
+                        }
+                        <label><input type="checkbox" @bind="formDrafts[job.Id].ConfirmObservedEntries" /> I inspected the employer form and confirm these exact values are present.</label>
+                        <button class="btn btn-sm btn-outline-primary mt-2" type="button" @onclick="() => RecordBrowserReceiptAsync(job.Id)">Record these entered values</button>
+                    }
+                }
+                <p>You can also record a field yourself after checking it on the employer page.</p>
+                @if (job.FormPlan is not null)
+                {
+                    @foreach (var entry in job.FormPlan.Entries.OrderBy(entry => entry.Id))
+                    {
+                        <p><strong>@entry.FieldLabel:</strong> @entry.ValueEntered <span class="text-secondary">· @(entry.SubmittedAt is null ? "entered, not confirmed sent" : $"confirmed sent {entry.SubmittedAt.Value.ToLocalTime():g}")</span>
+                            @if (entry.SubmittedAt is null)
+                            {
+                                <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="() => RemoveEnteredFieldAsync(job.Id, entry.Id)">Remove</button>
+                            }
+                        </p>
+                    }
+                }
+                @if (job.Status != OpportunityStatus.Submitted)
+                {
+                    <div class="profile-grid">
+                        <label>Field entered<input class="form-control" @bind="formDrafts[job.Id].EntryFieldLabel" /></label>
+                        <label>Exact value entered<textarea class="form-control" rows="2" @bind="formDrafts[job.Id].EntryValue"></textarea></label>
+                    </div>
+                    <button class="btn btn-sm btn-outline-primary mt-2" type="button" @onclick="() => RecordEnteredFieldAsync(job.Id)">Record entered value</button>
+                }
+                @if (job.FormPlan?.Mode == FormSubmissionMode.ApproveEachSubmission)
+                {
+                    <h4 class="mt-3">Submission approval</h4>
+                    <p>Review the employer, approved document versions, and exact form values above. Approval applies only to this snapshot; changing any of them requires another approval. This app still does not send the employer form.</p>
+                    <p>@(SubmissionApproval.IsCurrent(job) ? $"Approved {job.FormPlan.SubmissionApprovedAt!.Value.ToLocalTime():g}" : "Approval required for the current submission packet")</p>
+                    @if (job.Status != OpportunityStatus.Submitted)
+                    {
+                        <button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => ApproveSubmissionAsync(job.Id)">Approve this submission packet</button>
+                    }
+                }
+            </details>
+            @if (job.FormPlan?.Entries.Count > 0 && job.Status != OpportunityStatus.Submitted)
+            {
+                <label><input type="checkbox" @bind="formDrafts[job.Id].ConfirmSentEntries" /> I confirm the recorded field values are exactly what I sent to this employer.</label>
+            }
             <button class="btn btn-sm btn-outline-primary" @onclick="() => MarkSubmittedAsync(job.Id)">Record manual submission</button>
+            <details class="mt-3">
+                <summary>Follow-up · @(job.NextFollowUpOn is null ? "none scheduled" : job.NextFollowUpOn.Value.ToString("d"))</summary>
+                <p class="mt-2">Plan your next contact and keep a local record of what you did.</p>
+                <label>Next follow-up date<input class="form-control" type="date" @bind="followUpDrafts[job.Id].DueOn" /></label>
+                <button class="btn btn-sm btn-outline-primary mt-2" type="button" @onclick="() => ScheduleFollowUpAsync(job.Id)">Schedule follow-up</button>
+                @if (job.NextFollowUpOn is not null)
+                {
+                    <button class="btn btn-sm btn-outline-secondary mt-2" type="button" @onclick="() => ClearFollowUpAsync(job.Id)">Clear date</button>
+                }
+                <label class="mt-3">Follow-up note<textarea class="form-control" rows="2" @bind="followUpDrafts[job.Id].Note"></textarea></label>
+                <button class="btn btn-sm btn-outline-primary mt-2" type="button" @onclick="() => RecordFollowUpAsync(job.Id)">Record follow-up</button>
+                @foreach (var activity in job.Activities.OrderByDescending(activity => activity.OccurredAt))
+                {
+                    <p class="mt-2"><strong>@activity.Action</strong> · @activity.OccurredAt.ToLocalTime().ToString("g") · @activity.Note</p>
+                }
+            </details>
         </article>
     }
 </section>
@@ -104,13 +553,88 @@
     private EvidenceItem newEvidence = new();
     private JobOpportunity newJob = new();
     private List<JobOpportunity> jobs = [];
+    private Dictionary<int, FormPlanDraft> formDrafts = [];
+    private Dictionary<int, AutomaticRuleResult> ruleResults = [];
+    private Dictionary<int, FollowUpDraft> followUpDrafts = [];
+    private List<CandidateSourceDocument> sourceDocuments = [];
+    private CandidateDocumentImport? pendingSource;
+    private LegacyAccessCsvPreview? pendingLegacyCsv;
+    private LegacyAccessFileCatalog? pendingAccessCatalog;
+    private byte[]? pendingAccessBytes;
+    private string selectedAccessTable = "";
+    private string legacyCsvEncoding = LegacyAccessCsvPreviewService.Utf8EncodingName;
+    private LegacyAccessMappingPreview? legacyMappedPreview;
+    private LegacyEvidenceImportPlan? legacyImportPlan;
+    private LegacyProfileImportPlan? legacyProfileImportPlan;
+    private List<LegacyProfileImportBatch> legacyProfileImportBatches = [];
+    private bool legacyProfileImportConfirmed;
+    private List<LegacyEvidenceImportBatch> legacyImportBatches = [];
+    private bool legacyImportConfirmed;
+    private bool legacyImportBusy;
+    private List<LegacyColumnDraft> legacyColumnDrafts = [];
+    private int mappingSourceId;
+    private string mappingSourceName = "";
+    private string mappingSourceHash = "";
+    private string mappingEmail = "";
+    private string mappingPhone = "";
+    private string mappingSummary = "";
+    private List<EvidenceSuggestionDraft> mappingClaims = [];
+    private string sourceKind = "resume";
+    private IReadOnlyList<DiscoveredJob> discoveredJobs = [];
+    private bool isSearching;
+    private string searchSource = "remoteok";
+    private string employerBoardUrl = "";
+    private string searchKeywords = "";
+    private int minimumSearchFitPercent;
+    private string greenhouseEmployer = "";
+    private string greenhouseBoardToken = "";
+    private string leverEmployer = "";
+    private string leverSiteToken = "";
+    private string leverRegion = "global";
+    private string arbeitnowRegion = "europe";
+    private string searchLocation = "";
+    private bool CanSearchAll
+    {
+        get
+        {
+            var greenhouseName = !string.IsNullOrWhiteSpace(greenhouseEmployer);
+            var greenhouseToken = !string.IsNullOrWhiteSpace(greenhouseBoardToken);
+            var leverName = !string.IsNullOrWhiteSpace(leverEmployer);
+            var leverToken = !string.IsNullOrWhiteSpace(leverSiteToken);
+            return greenhouseName == greenhouseToken && leverName == leverToken;
+        }
+    }
     private string userId = "";
     private string message = "";
+
+    private void UseEmployerBoardUrl()
+    {
+        if (!EmployerBoardUrlParser.TryParse(employerBoardUrl, out var board) || board is null)
+        {
+            message = "Enter an HTTPS boards.greenhouse.io or jobs.lever.co board or posting URL.";
+            return;
+        }
+
+        searchSource = board.Source;
+        if (board.Source == "greenhouse")
+        {
+            greenhouseBoardToken = board.Token;
+            greenhouseEmployer = board.Token;
+        }
+        else
+        {
+            leverSiteToken = board.Token;
+            leverEmployer = board.Token;
+            leverRegion = board.Region;
+        }
+        message = "Board details filled in. Check the employer name, then search.";
+    }
 
     protected override async Task OnInitializedAsync()
     {
         var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+        newJob.UserId = userId;
         await ReloadAsync();
     }
 
@@ -119,8 +643,433 @@
         await using var db = await DbFactory.CreateDbContextAsync();
         profile = await db.CandidateProfiles.Include(item => item.Evidence).SingleOrDefaultAsync(item => item.UserId == userId)
             ?? new CandidateProfile { UserId = userId };
-        jobs = await db.JobOpportunities.Include(job => job.Documents).Include(job => job.Activities)
-            .Where(job => job.UserId == userId).OrderByDescending(job => job.ImportedAt).ToListAsync();
+        jobs = (await db.JobOpportunities.Include(job => job.Documents).Include(job => job.Activities)
+            .Include(job => job.FormPlan).ThenInclude(plan => plan!.Answers)
+            .Include(job => job.FormPlan).ThenInclude(plan => plan!.Entries)
+            .Where(job => job.UserId == userId).ToListAsync())
+            .OrderByDescending(job => job.ImportedAt).ToList();
+        var previousDrafts = formDrafts;
+        formDrafts = jobs.ToDictionary(job => job.Id, job => new FormPlanDraft
+        {
+            Mode = job.FormPlan?.Mode ?? FormSubmissionMode.SubmitPersonally,
+            Rules = job.FormPlan?.Rules ?? "",
+            SnapshotJson = previousDrafts.TryGetValue(job.Id, out var previous) ? previous.SnapshotJson : "",
+            ConfirmedExternalFormUrl = previousDrafts.TryGetValue(job.Id, out previous) ? previous.ConfirmedExternalFormUrl : "",
+            ConfirmExternalForm = previousDrafts.TryGetValue(job.Id, out previous) && previous.ConfirmExternalForm
+        });
+        ruleResults.Clear();
+        followUpDrafts = jobs.ToDictionary(job => job.Id, job => new FollowUpDraft
+        {
+            DueOn = job.NextFollowUpOn?.ToDateTime(TimeOnly.MinValue)
+        });
+        sourceDocuments = (await db.CandidateSourceDocuments.Where(source => source.UserId == userId).ToListAsync())
+            .OrderByDescending(source => source.ImportedAt).ToList();
+        legacyImportBatches = (await db.LegacyEvidenceImportBatches.Where(batch => batch.UserId == userId).ToListAsync())
+            .OrderByDescending(batch => batch.ImportedAt).ToList();
+        legacyProfileImportBatches = (await db.LegacyProfileImportBatches.Where(batch => batch.UserId == userId).ToListAsync())
+            .OrderByDescending(batch => batch.ImportedAt).ToList();
+    }
+
+    private async Task PreviewSourceDocumentAsync(InputFileChangeEventArgs eventArgs)
+    {
+        pendingSource = null;
+        try
+        {
+            var file = eventArgs.File;
+            await using var stream = file.OpenReadStream(CandidateDocumentImportService.MaxFileBytes);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            pendingSource = await DocumentImporter.ExtractAsync(file.Name, sourceKind, buffer.ToArray());
+            message = "Review the extracted text before saving it.";
+        }
+        catch (DocumentImportException exception)
+        {
+            message = exception.Code switch
+            {
+                "SIZE_LIMIT" => "Choose a nonempty file no larger than 2 MB.",
+                "OCR_REQUIRED" => "No PDF text was found. Run OCR on this scanned PDF, then import the searchable PDF.",
+                "OCR_NO_TEXT" => "OCR could not find text in this scanned PDF. Try a clearer scan.",
+                "OCR_FAILED" => "OCR could not read this scanned PDF. Check the scan and try again.",
+                "NO_TEXT" => "No text was found in this document. Choose a document with content.",
+                _ => "This document could not be read. Check that it is a valid TXT, DOCX, or text-based PDF."
+            };
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or ArgumentException)
+        {
+            message = "Choose a valid TXT, DOCX, or text-based PDF no larger than 2 MB.";
+        }
+    }
+
+    private async Task PreviewLegacyCsvAsync(InputFileChangeEventArgs eventArgs)
+    {
+        ClearLegacyCsvPreview();
+        ClearAccessSelection();
+        try
+        {
+            var file = eventArgs.File;
+            await using var stream = file.OpenReadStream(LegacyAccessCsvPreviewService.MaxFileBytes);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            pendingLegacyCsv = LegacyCsvPreviewer.Preview(file.Name, buffer.ToArray(), legacyCsvEncoding);
+            legacyColumnDrafts = pendingLegacyCsv.Columns.Select(column => new LegacyColumnDraft { Column = column }).ToList();
+            message = "Review the table columns and sample records before mapping.";
+        }
+        catch (LegacyAccessCsvPreviewException exception)
+        {
+            message = exception.Code switch
+            {
+                "UTF8_REQUIRED" => "This file is not UTF-8. If it came from older Western European Access, select Windows-1252 and upload it again.",
+                "SIZE_LIMIT" or "LIMIT" => "Choose a CSV up to 8 MB with at most 40 columns and 5,000 records.",
+                _ => "The CSV could not be previewed. Check its header, quoting, and row widths."
+            };
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or ArgumentException)
+        {
+            message = "Choose a CSV up to 8 MB with at most 40 columns and 5,000 records.";
+        }
+    }
+
+    private async Task InspectLegacyAccessAsync(InputFileChangeEventArgs eventArgs)
+    {
+        ClearLegacyCsvPreview();
+        ClearAccessSelection();
+        try
+        {
+            var file = eventArgs.File;
+            await using var stream = file.OpenReadStream(LegacyAccessFilePreviewService.MaxFileBytes);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            var bytes = buffer.ToArray();
+            var catalog = LegacyAccessFilePreviewer.Inspect(file.Name, bytes);
+            pendingAccessBytes = bytes;
+            pendingAccessCatalog = catalog;
+            selectedAccessTable = catalog.Tables[0];
+            message = "Choose one table to preview. No records have been imported.";
+        }
+        catch (LegacyAccessFilePreviewException exception)
+        {
+            message = AccessPreviewError(exception.Code);
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or ArgumentException)
+        {
+            message = "Choose an Access database up to 8 MB.";
+        }
+    }
+
+    private void PreviewLegacyAccessTable()
+    {
+        ClearLegacyCsvPreview();
+        if (pendingAccessCatalog is null || pendingAccessBytes is null) return;
+        try
+        {
+            pendingLegacyCsv = LegacyAccessFilePreviewer.Preview(
+                pendingAccessCatalog.FileName, pendingAccessBytes, selectedAccessTable);
+            legacyColumnDrafts = pendingLegacyCsv.Columns.Select(column => new LegacyColumnDraft { Column = column }).ToList();
+            message = "Review the table columns and sample records before mapping.";
+        }
+        catch (LegacyAccessFilePreviewException exception)
+        {
+            message = AccessPreviewError(exception.Code);
+        }
+    }
+
+    private static string AccessPreviewError(string code) => code switch
+    {
+        "SIZE_LIMIT" => "Choose an Access database up to 8 MB.",
+        "TABLE_LIMIT_OR_EMPTY" => "This database has no readable local tables or exceeds the 100-table limit.",
+        "ROW_LIMIT_OR_EMPTY" => "Choose a table with 1 to 5,000 records.",
+        "COLUMNS" or "ROW_LIMIT_OR_FORMAT" => "This table exceeds the 40-column or cell-size limit, or has unreadable values.",
+        _ => "This Access database could not be previewed. Try exporting the table as CSV."
+    };
+
+    private void ClearAccessSelection()
+    {
+        pendingAccessCatalog = null;
+        pendingAccessBytes = null;
+        selectedAccessTable = "";
+    }
+
+    private void ClearLegacyCsvPreview()
+    {
+        pendingLegacyCsv = null;
+        legacyMappedPreview = null;
+        legacyImportPlan = null;
+        legacyProfileImportPlan = null;
+        legacyProfileImportConfirmed = false;
+        legacyImportConfirmed = false;
+        legacyColumnDrafts = [];
+    }
+
+    private void ClearLegacyMappingPreview()
+    {
+        legacyMappedPreview = null;
+        legacyImportPlan = null;
+        legacyProfileImportPlan = null;
+        legacyProfileImportConfirmed = false;
+        legacyImportConfirmed = false;
+    }
+
+    private void PreviewLegacyMapping()
+    {
+        if (pendingLegacyCsv is null) return;
+        legacyImportPlan = null;
+        legacyProfileImportPlan = null;
+        legacyProfileImportConfirmed = false;
+        legacyImportConfirmed = false;
+        try
+        {
+            legacyMappedPreview = LegacyCsvPreviewer.PreviewMapping(
+                pendingLegacyCsv, legacyColumnDrafts.Select(draft => draft.Target).ToArray());
+            message = "Review the mapped sample. No records have been imported.";
+        }
+        catch (LegacyAccessCsvPreviewException exception)
+        {
+            legacyMappedPreview = null;
+            message = exception.Code switch
+            {
+                "MAPPING_DUPLICATE" => "Choose each destination field only once.",
+                "MAPPING_EMPTY" => "Choose at least one destination field to preview.",
+                _ => "Check the column mapping and try again."
+            };
+        }
+    }
+
+    private void PrepareLegacyEvidenceImport()
+    {
+        if (pendingLegacyCsv is null || legacyMappedPreview is null) return;
+        legacyProfileImportPlan = null;
+        legacyProfileImportConfirmed = false;
+        legacyImportConfirmed = false;
+        try
+        {
+            legacyImportPlan = LegacyCsvPreviewer.PrepareEvidenceImport(
+                pendingLegacyCsv, legacyColumnDrafts.Select(draft => draft.Target).ToArray());
+            message = "Review the evidence import plan. Nothing has been saved.";
+        }
+        catch (LegacyAccessCsvPreviewException exception)
+        {
+            legacyImportPlan = null;
+            message = exception.Code switch
+            {
+                "EVIDENCE_MAPPING" => "For evidence import, map exactly one column to Evidence claim and ignore the others.",
+                "CLAIM_LENGTH" => "An evidence claim exceeds 240 characters. Edit the source record before importing it.",
+                "NO_CLAIMS" => "The mapped column has no nonempty evidence claims.",
+                _ => "Check the evidence mapping and try again."
+            };
+        }
+    }
+
+    private void PrepareLegacyProfileImport()
+    {
+        if (pendingLegacyCsv is null || legacyMappedPreview is null) return;
+        legacyImportPlan = null;
+        legacyImportConfirmed = false;
+        legacyProfileImportConfirmed = false;
+        try
+        {
+            legacyProfileImportPlan = LegacyCsvPreviewer.PrepareProfileImport(
+                pendingLegacyCsv, legacyColumnDrafts.Select(draft => draft.Target).ToArray());
+            message = "Review the proposed profile fields. Nothing has been saved.";
+        }
+        catch (LegacyAccessCsvPreviewException exception)
+        {
+            legacyProfileImportPlan = null;
+            message = exception.Code switch
+            {
+                "PROFILE_ROW_COUNT" => "Profile import needs exactly one record. Select or export one applicant record and try again.",
+                "PROFILE_MAPPING" => "For profile import, map only profile fields and ignore evidence claims.",
+                "PROFILE_LENGTH" => "A mapped profile value is too long. Edit the source record before importing it.",
+                "PROFILE_EMAIL" => "The mapped email address is invalid. Edit the source record before importing it.",
+                _ => "No nonempty profile fields were mapped. Check the source record and mapping."
+            };
+        }
+    }
+
+    private async Task ImportLegacyProfileAsync()
+    {
+        if (!legacyProfileImportConfirmed || legacyProfileImportPlan is null || profile.Id == 0 || legacyImportBusy) return;
+        legacyImportBusy = true;
+        try
+        {
+            await ProfileImporter.ImportAsync(userId, legacyProfileImportPlan);
+            pendingLegacyCsv = null;
+            ClearAccessSelection();
+            legacyMappedPreview = null;
+            legacyImportPlan = null;
+            legacyProfileImportPlan = null;
+            legacyProfileImportConfirmed = false;
+            legacyColumnDrafts = [];
+            await ReloadAsync();
+            message = "Imported the reviewed profile fields. You can undo this change below.";
+        }
+        catch (LegacyProfileImportException exception)
+        {
+            message = exception.Code switch
+            {
+                "PROFILE_REQUIRED" => "Save your profile before importing these fields.",
+                "PROFILE_INVALID" => "The proposed changes would make your profile invalid. Review your profile and source record.",
+                _ => "The profile import plan is no longer valid. Preview the table again."
+            };
+        }
+        finally { legacyImportBusy = false; }
+    }
+
+    private async Task UndoLegacyProfileAsync(int batchId)
+    {
+        if (legacyImportBusy) return;
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "Undo this profile import? Imported fields will return to their previous values if they have not changed since import.");
+        if (!confirmed) return;
+        legacyImportBusy = true;
+        try
+        {
+            var restored = await ProfileImporter.UndoAsync(userId, batchId);
+            await ReloadAsync();
+            message = $"Restored {restored} profile fields to their previous values.";
+        }
+        catch (LegacyProfileImportException exception)
+        {
+            message = exception.Code == "PROFILE_CHANGED"
+                ? "One or more imported fields changed since import. Review them before undoing this batch."
+                : "That profile import batch was not found or is invalid. Reload the page and try again.";
+        }
+        finally { legacyImportBusy = false; }
+    }
+
+    private async Task ImportLegacyEvidenceAsync()
+    {
+        if (!legacyImportConfirmed || legacyImportPlan is null || profile.Id == 0 || legacyImportBusy) return;
+        legacyImportBusy = true;
+        try
+        {
+            var batch = await EvidenceImporter.ImportAsync(userId, legacyImportPlan);
+            pendingLegacyCsv = null;
+            ClearAccessSelection();
+            legacyMappedPreview = null;
+            legacyImportPlan = null;
+            legacyProfileImportPlan = null;
+            legacyProfileImportConfirmed = false;
+            legacyImportConfirmed = false;
+            legacyColumnDrafts = [];
+            await ReloadAsync();
+            message = $"Imported {batch.ClaimCount} evidence claims. You can undo this batch below.";
+        }
+        catch (LegacyEvidenceImportException exception)
+        {
+            message = exception.Code switch
+            {
+                "PROFILE_REQUIRED" => "Save your profile before importing evidence.",
+                "CLAIM_EXISTS" => "A proposed claim already exists in your evidence library. Review the CSV and try again.",
+                _ => "The import plan is no longer valid. Preview the table again."
+            };
+        }
+        finally { legacyImportBusy = false; }
+    }
+
+    private async Task UndoLegacyEvidenceImportAsync(int batchId)
+    {
+        if (legacyImportBusy) return;
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "Undo this import? All evidence claims from this batch, including any edits, will be removed.");
+        if (!confirmed) return;
+        legacyImportBusy = true;
+        try
+        {
+            var removed = await EvidenceImporter.UndoAsync(userId, batchId);
+            await ReloadAsync();
+            message = $"Removed {removed} imported evidence claims.";
+        }
+        catch (LegacyEvidenceImportException)
+        {
+            message = "That import batch was not found. Reload the page and try again.";
+        }
+        finally { legacyImportBusy = false; }
+    }
+
+    private async Task SaveSourceDocumentAsync()
+    {
+        if (pendingSource is null) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        db.CandidateSourceDocuments.Add(new CandidateSourceDocument
+        {
+            UserId = userId,
+            FileName = pendingSource.FileName,
+            Kind = pendingSource.Kind,
+            MediaType = pendingSource.MediaType,
+            SourceSha256 = pendingSource.SourceSha256,
+            ExtractedText = pendingSource.ExtractedText,
+            ReviewNotes = pendingSource.ReviewNotes
+        });
+        await db.SaveChangesAsync();
+        pendingSource = null;
+        message = "Document text imported. Review suggested facts to add them to your profile or evidence library.";
+        await ReloadAsync();
+    }
+
+    private void ReviewSourceFacts(CandidateSourceDocument source)
+    {
+        mappingSourceId = source.Id;
+        mappingSourceName = source.FileName;
+        mappingSourceHash = source.SourceSha256;
+        var suggestions = CandidateFactMapper.Suggest(source.ExtractedText);
+        mappingEmail = suggestions.Email;
+        mappingPhone = suggestions.Phone;
+        mappingSummary = suggestions.Summary;
+        mappingClaims = suggestions.Claims.Select(claim => new EvidenceSuggestionDraft { Claim = claim }).ToList();
+        message = "Review and edit suggestions before using them.";
+    }
+
+    private void ApplyProfileSuggestions()
+    {
+        if (!string.IsNullOrWhiteSpace(mappingEmail)) profile.Email = mappingEmail.Trim();
+        if (!string.IsNullOrWhiteSpace(mappingPhone)) profile.Phone = mappingPhone.Trim();
+        if (!string.IsNullOrWhiteSpace(mappingSummary)) profile.Summary = mappingSummary.Trim();
+        message = "Suggested details copied into the profile draft. Review and save the profile above.";
+    }
+
+    private async Task AddSuggestedEvidenceAsync(EvidenceSuggestionDraft suggestion)
+    {
+        if (profile.Id == 0 || suggestion.Added) return;
+        var claim = suggestion.Claim.Trim();
+        var kind = suggestion.Kind.Trim();
+        var keywords = suggestion.Keywords.Trim();
+        var details = suggestion.Details.Trim();
+        if (claim.Length is < 1 or > 240 || kind.Length is < 1 or > 80 || keywords.Length > 1000 || details.Length > 3700)
+        {
+            message = "Check the evidence lengths: claim 1–240, kind 1–80, keywords up to 1000, and details up to 3700 characters.";
+            return;
+        }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        if (!await db.CandidateSourceDocuments.AnyAsync(source => source.Id == mappingSourceId && source.UserId == userId))
+        {
+            message = "The imported source could not be found.";
+            return;
+        }
+        db.EvidenceItems.Add(new EvidenceItem
+        {
+            ProfileId = profile.Id,
+            Kind = kind,
+            Claim = claim,
+            Keywords = keywords,
+            Details = $"{details}\nSource: {mappingSourceName} (SHA-256: {mappingSourceHash})".Trim()
+        });
+        await db.SaveChangesAsync();
+        suggestion.Added = true;
+        message = "Reviewed evidence claim added.";
+        await ReloadAsync();
+    }
+
+    private sealed class LegacyColumnDraft
+    {
+        public string Column { get; set; } = "";
+        public string Target { get; set; } = "";
+    }
+
+    private sealed class EvidenceSuggestionDraft
+    {
+        public string Claim { get; set; } = "";
+        public string Kind { get; set; } = "achievement";
+        public string Keywords { get; set; } = "";
+        public string Details { get; set; } = "";
+        public bool Added { get; set; }
     }
 
     private async Task SaveProfileAsync()
@@ -158,9 +1107,90 @@
         await using var db = await DbFactory.CreateDbContextAsync();
         db.JobOpportunities.Add(newJob);
         await db.SaveChangesAsync();
-        newJob = new JobOpportunity();
+        newJob = new JobOpportunity { UserId = userId };
         message = "Opportunity analyzed; review both drafts before approval.";
         await ReloadAsync();
+    }
+
+    private async Task SearchJobsAsync()
+    {
+        isSearching = true;
+        message = "";
+        try
+        {
+            var filters = new JobSearchFilters(searchKeywords, minimumSearchFitPercent / 100f);
+            discoveredJobs = searchSource switch
+            {
+                "greenhouse" => await GreenhouseDiscovery.FindMatchesAsync(profile, greenhouseBoardToken, greenhouseEmployer, filters, searchLocation),
+                "lever" => await LeverDiscovery.FindMatchesAsync(profile, leverSiteToken, leverEmployer, filters, searchLocation, leverRegion),
+                "arbeitnow" => await ArbeitnowDiscovery.FindMatchesAsync(profile, filters, searchLocation, arbeitnowRegion),
+                "all" => await SearchAllConfiguredSourcesAsync(filters),
+                _ => await JobDiscovery.FindMatchesAsync(profile, filters)
+            };
+            if (discoveredJobs.Count == 0 && string.IsNullOrEmpty(message))
+                message = "No postings matched these filters right now. Try broader filters or import a posting below.";
+        }
+        catch (ArgumentException exception)
+        {
+            message = exception.Message;
+        }
+        catch (HttpRequestException exception) when (searchSource == "greenhouse" && exception.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            message = "That Greenhouse board was not found. Check the token from the employer's board URL.";
+        }
+        catch (HttpRequestException exception) when (searchSource == "lever" && exception.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            message = "That Lever site was not found. Check its site token and region.";
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException or InvalidDataException)
+        {
+            message = "Job search is temporarily unavailable. Try again later or import a posting below.";
+        }
+        finally
+        {
+            isSearching = false;
+        }
+    }
+
+    private async Task<IReadOnlyList<DiscoveredJob>> SearchAllConfiguredSourcesAsync(JobSearchFilters filters)
+    {
+        var batches = new List<IReadOnlyList<DiscoveredJob>>();
+        var failed = new List<string>();
+        async Task SearchOneAsync(string name, Func<Task<IReadOnlyList<DiscoveredJob>>> search)
+        {
+            try { batches.Add(await search()); }
+            catch (Exception exception) when (exception is ArgumentException or HttpRequestException
+                or TaskCanceledException or System.Text.Json.JsonException or InvalidDataException)
+            {
+                failed.Add(name);
+            }
+        }
+
+        await SearchOneAsync("Remote OK", () => JobDiscovery.FindMatchesAsync(profile, filters));
+        await SearchOneAsync("Arbeitnow Europe", () => ArbeitnowDiscovery.FindMatchesAsync(profile, filters, searchLocation));
+        await SearchOneAsync("Arbeitnow UK", () => ArbeitnowDiscovery.FindMatchesAsync(profile, filters, searchLocation, "uk"));
+        if (!string.IsNullOrWhiteSpace(greenhouseEmployer))
+            await SearchOneAsync("Greenhouse", () => GreenhouseDiscovery.FindMatchesAsync(
+                profile, greenhouseBoardToken, greenhouseEmployer, filters, searchLocation));
+        if (!string.IsNullOrWhiteSpace(leverEmployer))
+            await SearchOneAsync("Lever", () => LeverDiscovery.FindMatchesAsync(
+                profile, leverSiteToken, leverEmployer, filters, searchLocation, leverRegion));
+        if (failed.Count > 0)
+            message = $"Could not search these sources: {string.Join(", ", failed)}. Check their details or try again; results from other sources are shown.";
+        return JobSearchAggregator.Merge(batches);
+    }
+
+    private async Task DraftDiscoveredJobAsync(DiscoveredJob result)
+    {
+        newJob = new JobOpportunity
+        {
+            RoleTitle = result.RoleTitle,
+            Organization = result.Organization,
+            SourceUrl = result.SourceUrl,
+            Description = result.Description
+        };
+        await AddJobAsync();
+        discoveredJobs = [];
     }
 
     private async Task ApproveAsync(int documentId)
@@ -175,19 +1205,451 @@
         await ReloadAsync();
     }
 
+    private Task ExportDocxAsync(int documentId) => ExportAsync(documentId, "docx");
+    private Task ExportPdfAsync(int documentId) => ExportAsync(documentId, "pdf");
+
+    private async Task ExportAsync(int documentId, string format)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var document = await db.DocumentVersions
+            .Join(db.JobOpportunities, version => version.JobOpportunityId, job => job.Id,
+                (version, job) => new { Version = version, job.UserId })
+            .SingleOrDefaultAsync(item => item.Version.Id == documentId && item.UserId == userId);
+        if (document?.Version.ApprovedAt is null)
+        {
+            message = "Approve this document version before export.";
+            return;
+        }
+        var content = format == "pdf" ? Documents.ToPdf(document.Version.Content) : Documents.ToDocx(document.Version.Content);
+        var mediaType = format == "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        try
+        {
+            var saved = await ClientExport.SaveAsync(content, $"application-{documentId}.{format}", mediaType);
+            message = saved ? "Document saved." : "Save canceled.";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            message = "The document could not be saved at that location.";
+        }
+    }
+
     private async Task MarkSubmittedAsync(int jobId)
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        var job = await db.JobOpportunities.Include(item => item.Documents).SingleAsync(item => item.Id == jobId && item.UserId == userId);
+        var job = await db.JobOpportunities.Include(item => item.Documents)
+            .Include(item => item.FormPlan).ThenInclude(plan => plan!.Entries)
+            .SingleAsync(item => item.Id == jobId && item.UserId == userId);
+        if (job.Status == OpportunityStatus.Submitted)
+        {
+            message = "This opportunity is already recorded as submitted.";
+            return;
+        }
         if (job.Documents.Count < 2 || job.Documents.Any(document => document.ApprovedAt is null))
         {
             message = "Approve both document versions before recording a manual submission.";
             return;
         }
+        if (job.FormPlan?.Mode == FormSubmissionMode.ApproveEachSubmission && !SubmissionApproval.IsCurrent(job))
+        {
+            message = "Approve the current submission packet before recording submission.";
+            return;
+        }
+        if (job.FormPlan?.Entries.Count > 0 && !formDrafts[jobId].ConfirmSentEntries)
+        {
+            message = "Confirm that the recorded form values are exactly what you sent before recording submission.";
+            return;
+        }
+        var submittedAt = DateTimeOffset.UtcNow;
+        if (job.FormPlan is not null)
+        {
+            foreach (var entry in job.FormPlan.Entries.Where(entry => entry.SubmittedAt is null))
+                entry.SubmittedAt = submittedAt;
+        }
         job.Status = OpportunityStatus.Submitted;
-        job.Activities.Add(new ApplicationActivity { Action = "submitted", Note = "User confirmed a manual external submission." });
+        job.Activities.Add(new ApplicationActivity { Action = "submitted", Note = "User confirmed a manual external submission and any recorded form values." });
         await db.SaveChangesAsync();
         message = "Manual submission recorded. No external form was automated.";
         await ReloadAsync();
+    }
+
+    private async Task ApproveSubmissionAsync(int jobId)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.Include(item => item.Documents)
+            .Include(item => item.FormPlan).ThenInclude(plan => plan!.Entries)
+            .SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        if (job?.FormPlan?.Mode != FormSubmissionMode.ApproveEachSubmission || job.Status == OpportunityStatus.Submitted)
+            return;
+        if (job.Documents.Count < 2 || job.Documents.Any(document => document.ApprovedAt is null))
+        {
+            message = "Approve both document versions before approving this submission packet.";
+            return;
+        }
+        job.FormPlan.SubmissionApprovalFingerprint = SubmissionApproval.Fingerprint(job);
+        job.FormPlan.SubmissionApprovedAt = DateTimeOffset.UtcNow;
+        job.Activities.Add(new ApplicationActivity { Action = "submission-approved", Note = "Applicant approved the current document versions and recorded form values for this opportunity." });
+        await db.SaveChangesAsync();
+        message = "Current submission packet approved locally. No employer form was sent.";
+        await ReloadAsync();
+    }
+
+    private async Task ScheduleFollowUpAsync(int jobId)
+    {
+        var draft = followUpDrafts[jobId];
+        if (draft.DueOn is null || draft.DueOn.Value.Date < DateTime.Today)
+        {
+            message = "Choose today or a future date for the next follow-up.";
+            return;
+        }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        if (job is null) return;
+        job.NextFollowUpOn = DateOnly.FromDateTime(draft.DueOn.Value);
+        await db.SaveChangesAsync();
+        message = "Follow-up date saved locally.";
+        await ReloadAsync();
+    }
+
+    private async Task ClearFollowUpAsync(int jobId)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        if (job is null) return;
+        job.NextFollowUpOn = null;
+        await db.SaveChangesAsync();
+        message = "Follow-up date cleared.";
+        await ReloadAsync();
+    }
+
+    private async Task RecordFollowUpAsync(int jobId)
+    {
+        var note = followUpDrafts[jobId].Note.Trim();
+        if (note.Length is < 1 or > 1000)
+        {
+            message = "Enter a follow-up note of 1000 characters or fewer.";
+            return;
+        }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        if (job is null) return;
+        job.Activities.Add(new ApplicationActivity { Action = "follow-up", Note = note });
+        job.NextFollowUpOn = null;
+        await db.SaveChangesAsync();
+        message = "Follow-up recorded. Schedule another date if needed.";
+        await ReloadAsync();
+    }
+
+    private enum ProfileFact { FullName, Email, Phone }
+
+    private void UseProfileFact(int jobId, ProfileFact field)
+    {
+        var answer = field switch
+        {
+            ProfileFact.FullName => profile.DisplayName,
+            ProfileFact.Email => profile.Email,
+            ProfileFact.Phone => profile.Phone,
+            _ => ""
+        };
+        if (string.IsNullOrWhiteSpace(answer))
+        {
+            message = $"Save a {field.ToString().ToLowerInvariant()} in your profile first.";
+            return;
+        }
+        var draft = formDrafts[jobId];
+        draft.FieldLabel = field == ProfileFact.FullName ? "Full name" : field.ToString();
+        draft.Answer = answer;
+        draft.Source = "Saved profile";
+        message = "Review this suggested answer before saving it.";
+    }
+
+    private bool ValidateFormPlan(FormPlanDraft draft)
+    {
+        if (!Enum.IsDefined(draft.Mode))
+        {
+            message = "Choose a submission preference.";
+            return false;
+        }
+        if (draft.Rules.Length > 2000 ||
+            (draft.Mode == FormSubmissionMode.AutomaticWithinRules && string.IsNullOrWhiteSpace(draft.Rules)))
+        {
+            message = "Enter submission rules of 2000 characters or fewer for automatic mode.";
+            return false;
+        }
+        return true;
+    }
+
+    private void CheckAutomaticRules(int jobId)
+    {
+        var job = jobs.Single(item => item.Id == jobId);
+        ruleResults[jobId] = AutomaticSubmissionRuleEvaluator.Evaluate(job);
+    }
+
+    private async Task SaveFormPlanAsync(int jobId)
+    {
+        var draft = formDrafts[jobId];
+        if (!ValidateFormPlan(draft)) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.Include(item => item.FormPlan)
+            .SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        if (job is null) return;
+        job.FormPlan ??= new ApplicationFormPlan();
+        job.FormPlan.Mode = draft.Mode;
+        job.FormPlan.Rules = draft.Rules.Trim();
+        job.FormPlan.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+        message = "Submission preference saved locally. Employer form submission is not automated yet.";
+        await ReloadAsync();
+    }
+
+    private async Task AddPreparedAnswerAsync(int jobId)
+    {
+        var draft = formDrafts[jobId];
+        if (!ValidateFormPlan(draft)) return;
+        var field = draft.FieldLabel.Trim();
+        var answer = draft.Answer.Trim();
+        var source = draft.Source.Trim();
+        if (field.Length is < 1 or > 200 || answer.Length is < 1 or > 4000 || source.Length is < 1 or > 240)
+        {
+            message = "Enter a form field (up to 200 characters), answer (up to 4000), and source (up to 240).";
+            return;
+        }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.Include(item => item.FormPlan)
+            .SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        if (job is null) return;
+        job.FormPlan ??= new ApplicationFormPlan();
+        job.FormPlan.Mode = draft.Mode;
+        job.FormPlan.Rules = draft.Rules.Trim();
+        job.FormPlan.UpdatedAt = DateTimeOffset.UtcNow;
+        job.FormPlan.Answers.Add(new ApplicationFormAnswer
+        {
+            FieldLabel = field,
+            Answer = answer,
+            Source = source,
+            ReviewedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        message = "Reviewed answer saved locally. No employer form was filled or submitted.";
+        await ReloadAsync();
+    }
+
+    private async Task RecordEnteredFieldAsync(int jobId)
+    {
+        var draft = formDrafts[jobId];
+        var field = draft.EntryFieldLabel.Trim();
+        var value = draft.EntryValue.Trim();
+        if (field.Length is < 1 or > 200 || value.Length is < 1 or > 4000)
+        {
+            message = "Enter a field (up to 200 characters) and its exact value (up to 4000).";
+            return;
+        }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.Include(item => item.FormPlan)
+            .SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        if (job is null || job.Status == OpportunityStatus.Submitted) return;
+        job.FormPlan ??= new ApplicationFormPlan();
+        job.FormPlan.Entries.Add(new ApplicationFormEntry
+        {
+            FieldLabel = field,
+            ValueEntered = value,
+            EnteredAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        message = "Entered value recorded locally. It is not marked as sent.";
+        await ReloadAsync();
+    }
+
+    private async Task RemoveEnteredFieldAsync(int jobId, int entryId)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.Include(item => item.FormPlan).ThenInclude(plan => plan!.Entries)
+            .SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        var entry = job?.FormPlan?.Entries.SingleOrDefault(item => item.Id == entryId);
+        if (entry is null || entry.SubmittedAt is not null || job!.Status == OpportunityStatus.Submitted) return;
+        db.ApplicationFormEntries.Remove(entry);
+        await db.SaveChangesAsync();
+        message = "Unsent entered value removed.";
+        await ReloadAsync();
+    }
+
+    private static bool TryParseFormSnapshot(FormPlanDraft draft, out EmployerFormSnapshot? snapshot, out string error)
+    {
+        if (!EmployerFormSnapshotCodec.TryParse(draft.SnapshotJson, out snapshot, out error))
+            return false;
+        if (!draft.ConfirmExternalForm)
+            return true;
+        if (!Uri.TryCreate(draft.ConfirmedExternalFormUrl, UriKind.Absolute, out var confirmed) ||
+            confirmed.Scheme != Uri.UriSchemeHttps || confirmed.UserInfo.Length > 0 ||
+            !string.Equals(confirmed.AbsoluteUri, snapshot!.Url.AbsoluteUri, StringComparison.Ordinal))
+        {
+            error = "The confirmed external URL must exactly match the HTTPS form URL in the snapshot.";
+            snapshot = null;
+            return false;
+        }
+        snapshot = snapshot! with { ConfirmedExternalUrl = confirmed };
+        return true;
+    }
+
+    private void PreviewFormMatch(int jobId)
+    {
+        var draft = formDrafts[jobId];
+        draft.FormPreview = null;
+        draft.PreviewFingerprint = "";
+        draft.FormAuthorization = null;
+        if (!TryParseFormSnapshot(draft, out var snapshot, out var error))
+        {
+            message = error;
+            return;
+        }
+        var job = jobs.Single(job => job.Id == jobId);
+        draft.FormPreview = EmployerFormFillPlanner.Prepare(job, snapshot!);
+        draft.PreviewFingerprint = FormFillAuthorizer.Authorize(job, snapshot!)?.Fingerprint ?? "";
+        message = draft.FormPreview.IsComplete
+            ? "Reviewed answers match this form snapshot. No values were entered or sent."
+            : "The form match is blocked; review the reasons below.";
+    }
+
+    private async Task AuthorizeFormMatchAsync(int jobId)
+    {
+        var draft = formDrafts[jobId];
+        draft.FormAuthorization = null;
+        if (draft.FormPreview?.IsComplete != true || draft.PreviewFingerprint.Length == 0 ||
+            !TryParseFormSnapshot(draft, out var snapshot, out _))
+        {
+            message = "Preview this form and its proposed values again before authorizing.";
+            return;
+        }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.Include(item => item.FormPlan).ThenInclude(plan => plan!.Answers)
+            .SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        var authorization = job is null ? null : FormFillAuthorizer.Authorize(job, snapshot!);
+        if (authorization is null || !string.Equals(authorization.Fingerprint, draft.PreviewFingerprint, StringComparison.Ordinal))
+        {
+            message = "The form or reviewed answers changed. Preview the current match before authorizing.";
+            return;
+        }
+        draft.FormAuthorization = authorization;
+        message = "Exact form match authorized locally for ten minutes. No values were entered or sent.";
+    }
+
+    private bool IsFormMatchAuthorized(JobOpportunity job)
+    {
+        var draft = formDrafts[job.Id];
+        return TryParseFormSnapshot(draft, out var snapshot, out _) &&
+            FormFillAuthorizer.IsCurrent(job, snapshot!, draft.FormAuthorization);
+    }
+
+    private async Task CopyApprovedFillPacketAsync(int jobId)
+    {
+        var draft = formDrafts[jobId];
+        if (!TryParseFormSnapshot(draft, out var snapshot, out _))
+        {
+            draft.FormAuthorization = null;
+            message = "The form snapshot changed. Preview and authorize it again.";
+            return;
+        }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.Include(item => item.FormPlan).ThenInclude(plan => plan!.Answers)
+            .SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        var packet = job is null ? null : BrowserFormFillPacketBuilder.Create(job, snapshot!, draft.FormAuthorization);
+        if (packet is null)
+        {
+            draft.FormAuthorization = null;
+            message = "The authorization expired or the reviewed packet changed. Preview and authorize it again.";
+            return;
+        }
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", BrowserFormFillPacketBuilder.ToJson(packet));
+            message = "Approved form values copied for this exact page. Use the fill bookmarklet before authorization expires, then inspect and record what was entered. Nothing was submitted.";
+        }
+        catch (JSException)
+        {
+            message = "The browser could not access the clipboard. No form values were copied or entered.";
+        }
+    }
+
+    private async Task PasteBrowserReceiptAsync(int jobId)
+    {
+        try
+        {
+            formDrafts[jobId].BrowserReceiptJson = await JS.InvokeAsync<string>("navigator.clipboard.readText");
+            await PreviewBrowserReceiptAsync(jobId);
+        }
+        catch (JSException)
+        {
+            message = "Clipboard access was unavailable. Paste the browser receipt into the box instead.";
+        }
+    }
+
+    private async Task PreviewBrowserReceiptAsync(int jobId)
+    {
+        var draft = formDrafts[jobId];
+        draft.ReceiptPreviewValues = null;
+        draft.ReceiptPreviewJson = "";
+        draft.ConfirmObservedEntries = false;
+        if (!TryParseFormSnapshot(draft, out var snapshot, out _))
+        {
+            message = "Preview and authorize the current employer form before reviewing its receipt.";
+            return;
+        }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var job = await db.JobOpportunities.Include(item => item.FormPlan).ThenInclude(plan => plan!.Answers)
+            .SingleOrDefaultAsync(item => item.Id == jobId && item.UserId == userId);
+        var packet = job is null ? null : BrowserFormFillPacketBuilder.Create(job, snapshot!, draft.FormAuthorization);
+        if (packet is null || !BrowserFormFillReceiptValidator.TryMatch(draft.BrowserReceiptJson, packet, out var entered, out _))
+        {
+            message = "The browser receipt does not match the current authorized form. Preview and authorize again if it changed.";
+            return;
+        }
+        draft.ReceiptPreviewValues = entered;
+        draft.ReceiptPreviewJson = draft.BrowserReceiptJson;
+        message = "Review the values reported by the browser against the employer page before recording them.";
+    }
+
+    private async Task RecordBrowserReceiptAsync(int jobId)
+    {
+        var draft = formDrafts[jobId];
+        if (draft.ReceiptPreviewValues is not { Count: > 0 } ||
+            draft.BrowserReceiptJson != draft.ReceiptPreviewJson ||
+            !TryParseFormSnapshot(draft, out var snapshot, out _))
+        {
+            message = "The receipt changed. Review it again before recording.";
+            return;
+        }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var result = await BrowserFormEntryRecorder.RecordAsync(db, jobId, userId, snapshot!,
+            draft.FormAuthorization, draft.BrowserReceiptJson, draft.ConfirmObservedEntries);
+        message = result.Reason;
+        if (result.Recorded)
+            await ReloadAsync();
+    }
+
+    private sealed class FormPlanDraft
+    {
+        public FormSubmissionMode Mode { get; set; }
+        public string Rules { get; set; } = "";
+        public string FieldLabel { get; set; } = "";
+        public string Answer { get; set; } = "";
+        public string Source { get; set; } = "";
+        public string EntryFieldLabel { get; set; } = "";
+        public string EntryValue { get; set; } = "";
+        public bool ConfirmSentEntries { get; set; }
+        public string SnapshotJson { get; set; } = "";
+        public string ConfirmedExternalFormUrl { get; set; } = "";
+        public bool ConfirmExternalForm { get; set; }
+        public FormFillProposal? FormPreview { get; set; }
+        public string PreviewFingerprint { get; set; } = "";
+        public FormFillAuthorization? FormAuthorization { get; set; }
+        public string BrowserReceiptJson { get; set; } = "";
+        public string ReceiptPreviewJson { get; set; } = "";
+        public IReadOnlyList<ProposedFieldValue>? ReceiptPreviewValues { get; set; }
+        public bool ConfirmObservedEntries { get; set; }
+    }
+
+    private sealed class FollowUpDraft
+    {
+        public DateTime? DueOn { get; set; }
+        public string Note { get; set; } = "";
     }
 }

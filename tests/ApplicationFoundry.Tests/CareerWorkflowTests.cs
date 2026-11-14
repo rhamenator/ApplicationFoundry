@@ -2,6 +2,8 @@ using ApplicationFoundry.Data;
 using ApplicationFoundry.Features.Documents;
 using ApplicationFoundry.Features.Fit;
 using System.IO.Compression;
+using System.ComponentModel.DataAnnotations;
+using UglyToad.PdfPig;
 
 namespace ApplicationFoundry.Tests;
 
@@ -35,6 +37,16 @@ public sealed class CareerWorkflowTests
     }
 
     [Fact]
+    public void Profile_allows_blank_optional_contact_fields()
+    {
+        var profile = new CandidateProfile { UserId = "synthetic", FirstName = "Jordan", LastName = "Example" };
+        var results = new List<ValidationResult>();
+
+        Assert.True(Validator.TryValidateObject(profile, new ValidationContext(profile), results, true));
+        Assert.Empty(results);
+    }
+
+    [Fact]
     public void Local_onnx_model_returns_explainable_probability()
     {
         using var scorer = new OnnxFitScorer();
@@ -49,12 +61,95 @@ public sealed class CareerWorkflowTests
     }
 
     [Fact]
+    public void Managed_desktop_matcher_agrees_with_onnx_model()
+    {
+        var job = new JobOpportunity
+        {
+            RoleTitle = "Distributed systems engineer",
+            Description = "Build reliable distributed services using Rust and lead operations reviews."
+        };
+        using var onnx = new OnnxFitScorer();
+        var native = onnx.Score(Profile(), job);
+        var managed = new ManagedFitScorer().Score(Profile(), job);
+
+        Assert.InRange(Math.Abs(native.Score - managed.Score), 0, 0.00001f);
+        Assert.Equal(native.Features, managed.Features);
+        Assert.Equal(native.Explanation, managed.Explanation);
+    }
+
+    [Fact]
     public void Drafts_are_grounded_in_recorded_evidence()
     {
         var service = new CareerDocumentService();
         var resume = service.DraftResume(Profile(), new JobOpportunity { RoleTitle = "Engineer", Description = "Rust reliability" });
         Assert.Contains("Reduced service latency", resume);
         Assert.DoesNotContain("guaranteed", resume, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Drafts_avoid_empty_contact_separators_and_repeated_evidence()
+    {
+        var profile = Profile();
+        profile.Phone = "";
+        profile.Evidence =
+        [
+            new EvidenceItem
+            {
+                Claim = "Reviewed synthetic application workflows.",
+                Details = "Reviewed synthetic application workflows and documented repeatable results.",
+                Keywords = "review"
+            }
+        ];
+        var job = new JobOpportunity { RoleTitle = "QA specialist", Organization = "Example Labs", Description = "Review workflows" };
+        var service = new CareerDocumentService();
+
+        var resume = service.DraftResume(profile, job);
+        var letter = service.DraftCoverLetter(profile, job);
+
+        Assert.Contains("Avery Rivera\navery@example.test\n\nPROFILE", resume);
+        Assert.Contains("• Reviewed synthetic application workflows and documented repeatable results.", resume);
+        Assert.DoesNotContain("workflows.:", resume);
+        Assert.Contains("Avery Rivera\navery@example.test\n\nDear Hiring Team,", letter);
+        Assert.Contains("I am applying for the QA specialist position at Example Labs.", letter);
+        Assert.Contains("Relevant experience\n• Reviewed synthetic application workflows and documented repeatable results.", letter);
+        Assert.DoesNotContain("workflows..", letter);
+        Assert.DoesNotContain("workflows.:", letter);
+    }
+
+    [Fact]
+    public void Cover_letter_omits_empty_optional_sections()
+    {
+        var profile = Profile();
+        profile.Email = "";
+        profile.Phone = "";
+        profile.Summary = "";
+        profile.Evidence = [];
+
+        var letter = new CareerDocumentService().DraftCoverLetter(profile,
+            new JobOpportunity { RoleTitle = "QA specialist", Description = "Test workflows" });
+
+        Assert.StartsWith("Avery Rivera\n\nDear Hiring Team,", letter);
+        Assert.Contains("I am applying for the QA specialist position.", letter);
+        Assert.DoesNotContain("Relevant experience", letter);
+        Assert.DoesNotContain(" | ", letter);
+    }
+
+    [Fact]
+    public void Cover_letter_pdf_retains_organization_and_evidence_with_styled_name()
+    {
+        var service = new CareerDocumentService();
+        var letter = service.DraftCoverLetter(Profile(), new JobOpportunity
+        {
+            RoleTitle = "Reliability engineer",
+            Organization = "Example Labs",
+            Description = "Rust reliability"
+        });
+
+        using var pdf = PdfDocument.Open(service.ToPdf(letter));
+        var page = pdf.GetPage(1);
+        Assert.Contains("Reliability engineer position at Example Labs", page.Text);
+        Assert.Contains("Reduced service latency", page.Text);
+        Assert.True(page.Letters.First().FontSize > page.Letters.Min(item => item.FontSize));
     }
 
     [Fact]
@@ -74,5 +169,44 @@ public sealed class CareerWorkflowTests
         Assert.StartsWith("%PDF-1.4", text);
         Assert.Contains("xref", text);
         Assert.EndsWith("%%EOF\n", text);
+    }
+
+    [Fact]
+    public void Pdf_resume_name_is_larger_than_body_text()
+    {
+        var content = "Avery Rivera\navery@example.test\n\nPROFILE\nSynthetic QA specialist.\n\nSELECTED EVIDENCE\n• Reviewed a test workflow.";
+        var bytes = new CareerDocumentService().ToPdf(content);
+
+        using var pdf = PdfDocument.Open(bytes);
+        var letters = pdf.GetPage(1).Letters;
+        Assert.True(letters.First().FontSize > letters.Min(letter => letter.FontSize));
+        Assert.Contains("Synthetic QA specialist.", pdf.GetPage(1).Text);
+    }
+
+    [Fact]
+    public void Pdf_keeps_content_beyond_the_first_page()
+    {
+        var content = string.Join('\n', Enumerable.Range(1, 60).Select(index => $"Evidence line {index}"));
+        var bytes = new CareerDocumentService().ToPdf(content);
+        var text = System.Text.Encoding.ASCII.GetString(bytes);
+
+        Assert.Contains("/Count 2", text);
+        Assert.Contains("Evidence line 60", text);
+        using var pdf = PdfDocument.Open(bytes);
+        Assert.Equal(2, pdf.NumberOfPages);
+        Assert.Contains("Evidence line 60", pdf.GetPage(2).Text);
+    }
+
+    [Fact]
+    public void Pdf_starts_a_new_page_with_the_whole_evidence_item()
+    {
+        var content = string.Join('\n', Enumerable.Range(1, 30).Select(index =>
+            $"• Synthetic evidence item {index}: reviewed applicant workflows, documented the result, and checked that the exported record remained readable across a page boundary."));
+        var bytes = new CareerDocumentService().ToPdf(content);
+
+        using var pdf = PdfDocument.Open(bytes);
+        Assert.True(pdf.NumberOfPages > 1);
+        Assert.StartsWith("• Synthetic evidence item", pdf.GetPage(2).Text);
+        Assert.Contains("Synthetic evidence item 30", pdf.GetPage(pdf.NumberOfPages).Text);
     }
 }
