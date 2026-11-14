@@ -7,6 +7,8 @@ public sealed class LegacyAccessFilePreviewTests
 {
     private static readonly byte[] SyntheticDatabase = File.ReadAllBytes(
         Path.Combine(AppContext.BaseDirectory, "Fixtures", "synthetic-jet4.mdb"));
+    private static readonly byte[] SyntheticAceDatabase = File.ReadAllBytes(
+        Path.Combine(AppContext.BaseDirectory, "Fixtures", "synthetic-ace12.accdb"));
     private readonly LegacyAccessFilePreviewService previewer = new();
 
     [Fact]
@@ -38,5 +40,18 @@ public sealed class LegacyAccessFilePreviewTests
             previewer.Inspect("test.mdb", new byte[4096])).Code);
         Assert.Equal("FILE_NAME", Assert.Throws<LegacyAccessFilePreviewException>(() =>
             previewer.Inspect("test.csv", SyntheticDatabase)).Code);
+    }
+
+    [Fact]
+    public void Lists_and_previews_a_synthetic_true_ace12_table()
+    {
+        var catalog = previewer.Inspect("synthetic-ace12.accdb", SyntheticAceDatabase);
+        Assert.Equal(["Applicants"], catalog.Tables);
+        Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(SyntheticAceDatabase)), catalog.SourceSha256);
+
+        var preview = previewer.Preview(catalog.FileName, SyntheticAceDatabase, "Applicants");
+        Assert.Equal(["Id", "Name", "Email"], preview.Columns);
+        Assert.Equal(1, preview.RowCount);
+        Assert.Equal(["1", "Avery Example", "avery@example.test"], Assert.Single(preview.SampleRows));
     }
 }
