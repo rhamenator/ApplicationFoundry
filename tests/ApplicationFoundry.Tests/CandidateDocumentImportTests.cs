@@ -63,6 +63,44 @@ public sealed class CandidateDocumentImportTests
     }
 
     [Fact]
+    public async Task Uses_local_ocr_only_for_textless_pdfs_and_requires_review()
+    {
+        var ocr = new SyntheticPdfOcr("Avery Rivera\nVerified synthetic workflow");
+        var importerWithOcr = new CandidateDocumentImportService(ocr);
+        var textPdf = await importerWithOcr.ExtractAsync("readable.pdf", "resume",
+            documents.ToPdf("Avery Rivera\nBuilt reliable systems"));
+        Assert.Equal(0, ocr.Calls);
+        Assert.Contains("Built reliable systems", textPdf.ExtractedText);
+
+        var scannedBytes = documents.ToPdf(" ");
+        var scan = await importerWithOcr.ExtractAsync("scan.pdf", "resume", scannedBytes);
+        Assert.Equal(1, ocr.Calls);
+        Assert.Equal("Avery Rivera\nVerified synthetic workflow", scan.ExtractedText);
+        Assert.Contains("OCR", scan.ReviewNotes);
+        Assert.Equal(64, scan.SourceSha256.Length);
+    }
+
+    [Fact]
+    public async Task Rejects_an_ocr_result_without_text()
+    {
+        var importerWithOcr = new CandidateDocumentImportService(new SyntheticPdfOcr(" "));
+        var error = await Assert.ThrowsAsync<DocumentImportException>(() =>
+            importerWithOcr.ExtractAsync("scan.pdf", "resume", documents.ToPdf(" ")));
+        Assert.Equal("OCR_NO_TEXT", error.Code);
+    }
+
+    private sealed class SyntheticPdfOcr(string text) : ICandidatePdfOcr
+    {
+        public int Calls { get; private set; }
+        public Task<string> ExtractTextAsync(byte[] pdfBytes, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Calls++;
+            return Task.FromResult(text);
+        }
+    }
+
+    [Fact]
     public void Suggests_only_reviewable_facts_from_imported_text()
     {
         const string text = "Avery Rivera\navery@example.com | (313) 555-0123\nProfessional Summary\nReliable systems engineer with experience in testing.\n\nExperience\n• Built reliable release pipelines for multiple products\n- Reduced support requests through clearer documentation\n• Built reliable release pipelines for multiple products";

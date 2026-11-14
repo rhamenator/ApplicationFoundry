@@ -22,14 +22,24 @@ public interface ICandidateDocumentImportService
     Task<CandidateDocumentImport> ExtractAsync(string fileName, string kind, byte[] bytes, CancellationToken cancellationToken = default);
 }
 
+// A desktop host may supply a local, bounded PDF OCR engine. The web build
+// deliberately has no provider and continues to report OCR_REQUIRED.
+public interface ICandidatePdfOcr
+{
+    Task<string> ExtractTextAsync(byte[] pdfBytes, CancellationToken cancellationToken);
+}
+
 public sealed class CandidateDocumentImportService : ICandidateDocumentImportService
 {
     public const int MaxFileBytes = 2_097_152;
     private const int MaxCharacters = 200_000;
     private const int MaxPages = 100;
     private const long MaxExpandedBytes = 20_971_520;
+    private readonly ICandidatePdfOcr? pdfOcr;
 
-    public Task<CandidateDocumentImport> ExtractAsync(
+    public CandidateDocumentImportService(ICandidatePdfOcr? pdfOcr = null) => this.pdfOcr = pdfOcr;
+
+    public async Task<CandidateDocumentImport> ExtractAsync(
         string fileName, string kind, byte[] bytes, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -48,12 +58,18 @@ public sealed class CandidateDocumentImportService : ICandidateDocumentImportSer
             ".pdf" => ("application/pdf", ReadPdf(bytes, cancellationToken), "PDF layout needs review"),
             _ => throw new ArgumentException("Choose a TXT, DOCX, or PDF file.", nameof(fileName))
         };
+        if (string.IsNullOrWhiteSpace(text) && mediaType == "application/pdf" && pdfOcr is not null)
+        {
+            text = await pdfOcr.ExtractTextAsync(bytes, cancellationToken);
+            notes = "OCR text and PDF layout need review";
+        }
         if (string.IsNullOrWhiteSpace(text))
-            throw new DocumentImportException(mediaType == "application/pdf" ? "OCR_REQUIRED" : "NO_TEXT");
+            throw new DocumentImportException(mediaType == "application/pdf"
+                ? pdfOcr is null ? "OCR_REQUIRED" : "OCR_NO_TEXT" : "NO_TEXT");
         if (text.Length > MaxCharacters)
             throw new DocumentImportException("TEXT_LIMIT");
         var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
-        return Task.FromResult(new CandidateDocumentImport(safeName, kind, mediaType, hash, text, notes));
+        return new CandidateDocumentImport(safeName, kind, mediaType, hash, text, notes);
     }
 
     private static string ReadPlainText(byte[] bytes)
