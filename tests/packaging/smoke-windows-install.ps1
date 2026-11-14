@@ -10,8 +10,12 @@ if ($install.ExitCode -ne 0) {
 }
 
 $app = Join-Path $installPath 'ApplicationFoundry.Desktop.exe'
+$shortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Application Foundry\Application Foundry.lnk'
 if (-not (Test-Path $app)) {
     throw "The installed desktop executable is missing."
+}
+if (-not (Test-Path $shortcut)) {
+    throw "The Start menu shortcut is missing after install."
 }
 if (Test-Path (Join-Path $installPath 'ApplicationFoundry.exe')) {
     throw 'The legacy console/server executable was included in the desktop installer.'
@@ -38,5 +42,8 @@ if ($uninstall.ExitCode -ne 0) {
 }
 if (Test-Path $app) {
     throw "The desktop executable remains after uninstall."
+}
+if (Test-Path $shortcut) {
+    throw "The Start menu shortcut remains after uninstall."
 }
 Write-Host 'Standard Windows desktop installer installed, started, and uninstalled successfully.'
