@@ -60,7 +60,9 @@ public sealed class LeverJobDiscoveryTests
                   {"text":"C# Developer","categories":{"location":"Detroit, MI"},"hostedUrl":"https://{{jobsHost}}/example_site/2","descriptionPlain":"Build software","lists":[{"text":"Responsibilities","content":"<li>Review code</li>"}]},
                   {"text":"C# Developer","categories":{"location":"Detroit, MI"},"hostedUrl":"https://{{jobsHost}}/example_site/2","descriptionPlain":"Build software"},
                   {"text":"C# Developer","categories":{"location":"Remote"},"hostedUrl":"https://{{jobsHost}}/example_site/3","descriptionPlain":"Build software"},
-                  {"text":"C# Developer","categories":{"location":"Detroit, MI"},"hostedUrl":"https://elsewhere.example/example_site/4","descriptionPlain":"Build software"}
+                  {"text":"C# Developer","categories":{"location":"Detroit, MI"},"hostedUrl":"https://elsewhere.example/example_site/4","descriptionPlain":"Build software"},
+                  {"text":"C# Developer","categories":{"location":"Detroit, MI"},"hostedUrl":"https://user:secret@{{jobsHost}}/example_site/5","descriptionPlain":"Build software"},
+                  {"text":"C# Developer","categories":{"location":"Detroit, MI"},"hostedUrl":"https://{{jobsHost}}:8443/example_site/6","descriptionPlain":"Build software"}
                 ]
                 """;
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(feed) });

@@ -82,7 +82,9 @@ public class JobDiscoveryTests
                   {"position":"Office Assistant","company":"Example","url":"https://remoteok.com/remote-jobs/1","description":"<p>Manage records</p>"},
                   {"position":"C# Developer","company":"Example","url":"https://remoteok.com/remote-jobs/2","description":"<p>Build software</p>"},
                   {"position":"C# Developer","company":"Example","url":"https://www.remoteok.com/remote-jobs/2?ref=feed","description":"<p>Build software</p>"},
-                  {"position":"Unsafe","company":"Example","url":"https://elsewhere.example/job","description":"<p>Ignore</p>"}
+                  {"position":"Unsafe","company":"Example","url":"https://elsewhere.example/job","description":"<p>Ignore</p>"},
+                  {"position":"C# Developer","company":"Example","url":"https://user:secret@remoteok.com/remote-jobs/4","description":"<p>Build software</p>"},
+                  {"position":"C# Developer","company":"Example","url":"https://remoteok.com:8443/remote-jobs/5","description":"<p>Build software</p>"}
                 ]
                 """;
             HttpContent content = chunkedOversized

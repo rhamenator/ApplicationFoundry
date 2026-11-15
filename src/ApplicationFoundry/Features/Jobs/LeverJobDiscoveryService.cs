@@ -54,7 +54,9 @@ public sealed partial class LeverJobDiscoveryService(HttpClient client, IFitScor
                 ? ReadString(categories, "location") : "";
             if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(description)
                 || !Uri.TryCreate(rawUrl, UriKind.Absolute, out var url)
-                || url.Scheme != Uri.UriSchemeHttps || !url.Host.Equals(jobsHost, StringComparison.OrdinalIgnoreCase)
+                || url.Scheme != Uri.UriSchemeHttps || !url.IsDefaultPort
+                || !string.IsNullOrEmpty(url.UserInfo)
+                || !url.Host.Equals(jobsHost, StringComparison.OrdinalIgnoreCase)
                 || !url.AbsolutePath.StartsWith($"/{siteToken}/", StringComparison.OrdinalIgnoreCase))
                 continue;
             if (!string.IsNullOrWhiteSpace(location)

@@ -44,7 +44,8 @@ public sealed partial class GreenhouseJobDiscoveryService(HttpClient client, IFi
                 ? ReadString(locationValue, "name") : "";
             if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(description)
                 || !Uri.TryCreate(rawUrl, UriKind.Absolute, out var url)
-                || url.Scheme != Uri.UriSchemeHttps || url.IsLoopback)
+                || url.Scheme != Uri.UriSchemeHttps || !url.IsDefaultPort
+                || !string.IsNullOrEmpty(url.UserInfo) || url.IsLoopback)
                 continue;
             if (!string.IsNullOrWhiteSpace(location)
                 && !jobLocation.Contains(location.Trim(), StringComparison.OrdinalIgnoreCase))

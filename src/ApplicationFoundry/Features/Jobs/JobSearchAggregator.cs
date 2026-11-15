@@ -8,7 +8,8 @@ public static class JobSearchAggregator
         foreach (var job in sources.SelectMany(source => source))
         {
             if (!Uri.TryCreate(job.SourceUrl, UriKind.Absolute, out var url)
-                || url.Scheme != Uri.UriSchemeHttps) continue;
+                || url.Scheme != Uri.UriSchemeHttps || !url.IsDefaultPort
+                || !string.IsNullOrEmpty(url.UserInfo) || url.IsLoopback) continue;
             var key = url.GetLeftPart(UriPartial.Path).TrimEnd('/');
             if (!jobs.TryGetValue(key, out var existing) || job.FitScore > existing.FitScore)
                 jobs[key] = job;

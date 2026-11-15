@@ -56,7 +56,9 @@ public class GreenhouseJobDiscoveryTests
                   {"title":"C# Developer","location":{"name":"Detroit, MI"},"absolute_url":"https://boards.greenhouse.io/example_employer/jobs/2","content":"&lt;p&gt;Build software&lt;/p&gt;"},
                   {"title":"C# Developer","location":{"name":"Detroit, MI"},"absolute_url":"https://boards.greenhouse.io/example_employer/jobs/2","content":"<p>Build software</p>"},
                   {"title":"C# Developer","location":{"name":"Remote"},"absolute_url":"https://boards.greenhouse.io/example_employer/jobs/3","content":"<p>Build software</p>"},
-                  {"title":"C# Developer","location":{"name":"Detroit, MI"},"absolute_url":"http://example.com/jobs/4","content":"<p>Build software</p>"}
+                  {"title":"C# Developer","location":{"name":"Detroit, MI"},"absolute_url":"http://example.com/jobs/4","content":"<p>Build software</p>"},
+                  {"title":"C# Developer","location":{"name":"Detroit, MI"},"absolute_url":"https://user:secret@boards.greenhouse.io/example_employer/jobs/5","content":"<p>Build software</p>"},
+                  {"title":"C# Developer","location":{"name":"Detroit, MI"},"absolute_url":"https://boards.greenhouse.io:8443/example_employer/jobs/6","content":"<p>Build software</p>"}
                 ]}
                 """;
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(feed) });

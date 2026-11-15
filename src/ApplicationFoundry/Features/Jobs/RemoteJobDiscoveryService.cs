@@ -50,7 +50,8 @@ public sealed partial class RemoteJobDiscoveryService(HttpClient client, IFitSco
             var description = CleanDescription(ReadString(item, "description"));
             if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(description)
                 || !Uri.TryCreate(rawUrl, UriKind.Absolute, out var url)
-                || url.Scheme != Uri.UriSchemeHttps
+                || url.Scheme != Uri.UriSchemeHttps || !url.IsDefaultPort
+                || !string.IsNullOrEmpty(url.UserInfo)
                 || url.Host is not ("remoteok.com" or "www.remoteok.com"))
                 continue;
 
