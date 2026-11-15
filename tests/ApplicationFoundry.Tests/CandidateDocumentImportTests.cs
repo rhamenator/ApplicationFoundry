@@ -81,6 +81,19 @@ public sealed class CandidateDocumentImportTests
     }
 
     [Fact]
+    public async Task Warns_when_a_readable_pdf_has_a_textless_page()
+    {
+        var bytes = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory,
+            "Fixtures", "synthetic-text-and-blank-page.pdf"));
+
+        var result = await importer.ExtractAsync("mixed.pdf", "resume", bytes);
+
+        Assert.Contains("Avery Example", result.ExtractedText);
+        Assert.Contains("one or more pages have no extractable text", result.ReviewNotes);
+        Assert.Contains("scanned content", result.ReviewNotes);
+    }
+
+    [Fact]
     public async Task Rejects_an_ocr_result_without_text()
     {
         var importerWithOcr = new CandidateDocumentImportService(new SyntheticPdfOcr(" "));

@@ -55,7 +55,7 @@ public sealed class CandidateDocumentImportService : ICandidateDocumentImportSer
         {
             ".txt" => ("text/plain", ReadPlainText(bytes), ""),
             ".docx" => ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", ReadDocx(bytes, cancellationToken), ""),
-            ".pdf" => ("application/pdf", ReadPdf(bytes, cancellationToken), "PDF layout needs review"),
+            ".pdf" => ReadPdfForImport(bytes, cancellationToken),
             _ => throw new ArgumentException("Choose a TXT, DOCX, or PDF file.", nameof(fileName))
         };
         if (string.IsNullOrWhiteSpace(text) && mediaType == "application/pdf" && pdfOcr is not null)
@@ -129,7 +129,17 @@ public sealed class CandidateDocumentImportService : ICandidateDocumentImportSer
         catch (Exception) { throw new DocumentImportException("MALFORMED_DOCUMENT"); }
     }
 
-    private static string ReadPdf(byte[] bytes, CancellationToken cancellationToken)
+    private static (string MediaType, string Text, string Notes) ReadPdfForImport(
+        byte[] bytes, CancellationToken cancellationToken)
+    {
+        var (text, hasTextlessPage) = ReadPdf(bytes, cancellationToken);
+        var notes = hasTextlessPage && !string.IsNullOrWhiteSpace(text)
+            ? "PDF layout needs review; one or more pages have no extractable text and may contain scanned content"
+            : "PDF layout needs review";
+        return ("application/pdf", text, notes);
+    }
+
+    private static (string Text, bool HasTextlessPage) ReadPdf(byte[] bytes, CancellationToken cancellationToken)
     {
         if (!bytes.AsSpan().StartsWith("%PDF-"u8))
             throw new DocumentImportException("PDF_SIGNATURE");
@@ -139,15 +149,17 @@ public sealed class CandidateDocumentImportService : ICandidateDocumentImportSer
             if (document.NumberOfPages > MaxPages) throw new DocumentImportException("PAGE_LIMIT");
             var pages = new List<string>();
             var length = 0;
+            var hasTextlessPage = false;
             foreach (var page in document.GetPages())
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var text = ContentOrderTextExtractor.GetText(page);
+                hasTextlessPage |= string.IsNullOrWhiteSpace(text);
                 length += text.Length;
                 if (length > MaxCharacters) throw new DocumentImportException("TEXT_LIMIT");
                 pages.Add(text);
             }
-            return string.Join("\n\n", pages);
+            return (string.Join("\n\n", pages), hasTextlessPage);
         }
         catch (DocumentImportException) { throw; }
         catch (OperationCanceledException) { throw; }
