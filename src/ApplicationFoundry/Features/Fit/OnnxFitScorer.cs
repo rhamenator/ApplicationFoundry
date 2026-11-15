@@ -18,6 +18,15 @@ public sealed partial class OnnxFitScorer : IFitScorer, IDisposable
 
     public FitResult Score(CandidateProfile profile, JobOpportunity job)
     {
+        var (features, explanation) = Analyze(profile, job);
+        var tensor = new DenseTensor<float>(features, [1, 4]);
+        using var results = session.Run([NamedOnnxValue.CreateFromTensor("features", tensor)]);
+        var score = results.Single(result => result.Name == "score").AsEnumerable<float>().Single();
+        return new FitResult(score, explanation, features);
+    }
+
+    internal static (float[] Features, string Explanation) Analyze(CandidateProfile profile, JobOpportunity job)
+    {
         var descriptionTerms = Terms(job.Description);
         var evidenceTerms = Terms(string.Join(' ', profile.Evidence.Select(item => $"{item.Claim} {item.Details} {item.Keywords}")));
         var profileTerms = Terms($"{profile.Summary} {string.Join(' ', profile.Evidence.Select(item => item.Claim))}");
@@ -29,9 +38,6 @@ public sealed partial class OnnxFitScorer : IFitScorer, IDisposable
             Coverage(titleTerms, profileTerms),
             Math.Clamp(profile.Evidence.Count / 8f, 0f, 1f)
         };
-        var tensor = new DenseTensor<float>(features, [1, 4]);
-        using var results = session.Run([NamedOnnxValue.CreateFromTensor("features", tensor)]);
-        var score = results.Single(result => result.Name == "score").AsEnumerable<float>().Single();
         var strongest = features
             .Select((value, index) => (value, index))
             .OrderByDescending(item => item.value)
@@ -40,7 +46,7 @@ public sealed partial class OnnxFitScorer : IFitScorer, IDisposable
         var missing = descriptionTerms.Except(evidenceTerms).Take(5).ToArray();
         var explanation = $"Strongest signal: {labels[strongest.index]} ({strongest.value:P0}). " +
             (missing.Length == 0 ? "No major unmatched terms were detected." : $"Review unmatched terms: {string.Join(", ", missing)}.");
-        return new FitResult(score, explanation, features);
+        return (features, explanation);
     }
 
     private static HashSet<string> Terms(string text) => WordPattern()

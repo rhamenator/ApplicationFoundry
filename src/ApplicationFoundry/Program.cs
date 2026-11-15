@@ -4,8 +4,10 @@ using Microsoft.EntityFrameworkCore;
 using ApplicationFoundry.Components;
 using ApplicationFoundry.Components.Account;
 using ApplicationFoundry.Data;
+using ApplicationFoundry.Features;
 using ApplicationFoundry.Features.Documents;
 using ApplicationFoundry.Features.Fit;
+using ApplicationFoundry.Features.Jobs;
 using Microsoft.Data.Sqlite;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
@@ -73,7 +75,8 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
 
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 builder.Services.AddSingleton<IFitScorer, OnnxFitScorer>();
-builder.Services.AddSingleton<ICareerDocumentService, CareerDocumentService>();
+builder.Services.AddCareerFeatures();
+builder.Services.AddSingleton<IClientDocumentExport, BrowserDocumentExport>();
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();

@@ -12,8 +12,8 @@ public sealed class CandidateProfile
     [Required, MaxLength(80)] public string LastName { get; set; } = "";
     [MaxLength(32)] public string Suffix { get; set; } = "";
     [MaxLength(160)] public string PreferredDisplayName { get; set; } = "";
-    [EmailAddress, MaxLength(256)] public string Email { get; set; } = "";
-    [Phone, MaxLength(64)] public string Phone { get; set; } = "";
+    [OptionalEmailAddress, MaxLength(256)] public string Email { get; set; } = "";
+    [OptionalPhone, MaxLength(64)] public string Phone { get; set; } = "";
     [MaxLength(4000)] public string Summary { get; set; } = "";
     public List<EvidenceItem> Evidence { get; set; } = [];
 
@@ -27,10 +27,47 @@ public sealed class EvidenceItem
 {
     public int Id { get; set; }
     public int ProfileId { get; set; }
+    public int? LegacyImportBatchId { get; set; }
     [Required, MaxLength(80)] public string Kind { get; set; } = "achievement";
     [Required, MaxLength(240)] public string Claim { get; set; } = "";
     [MaxLength(4000)] public string Details { get; set; } = "";
     [MaxLength(1000)] public string Keywords { get; set; } = "";
+}
+
+public sealed class LegacyEvidenceImportBatch
+{
+    public int Id { get; set; }
+    [Required, MaxLength(450)] public string UserId { get; set; } = "";
+    public int ProfileId { get; set; }
+    [Required, MaxLength(200)] public string FileName { get; set; } = "";
+    [Required, MaxLength(64)] public string SourceSha256 { get; set; } = "";
+    public int ClaimCount { get; set; }
+    public DateTimeOffset ImportedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+public sealed class LegacyProfileImportBatch
+{
+    public int Id { get; set; }
+    [Required, MaxLength(450)] public string UserId { get; set; } = "";
+    public int ProfileId { get; set; }
+    [Required, MaxLength(200)] public string FileName { get; set; } = "";
+    [Required, MaxLength(64)] public string SourceSha256 { get; set; } = "";
+    [Required, MaxLength(30000)] public string BeforeJson { get; set; } = "";
+    [Required, MaxLength(30000)] public string AfterJson { get; set; } = "";
+    public DateTimeOffset ImportedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+public sealed class CandidateSourceDocument
+{
+    public int Id { get; set; }
+    [Required, MaxLength(450)] public string UserId { get; set; } = "";
+    [Required, MaxLength(200)] public string FileName { get; set; } = "";
+    [Required, MaxLength(80)] public string Kind { get; set; } = "resume";
+    [Required, MaxLength(120)] public string MediaType { get; set; } = "";
+    [Required, MaxLength(64)] public string SourceSha256 { get; set; } = "";
+    [Required, MaxLength(200000)] public string ExtractedText { get; set; } = "";
+    [MaxLength(1000)] public string ReviewNotes { get; set; } = "";
+    public DateTimeOffset ImportedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
 public enum OpportunityStatus
@@ -54,10 +91,47 @@ public sealed class JobOpportunity
     [Required, MaxLength(30000)] public string Description { get; set; } = "";
     public OpportunityStatus Status { get; set; } = OpportunityStatus.Interested;
     public DateTimeOffset ImportedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateOnly? NextFollowUpOn { get; set; }
     public float FitScore { get; set; }
     [MaxLength(2000)] public string FitExplanation { get; set; } = "";
     public List<DocumentVersion> Documents { get; set; } = [];
     public List<ApplicationActivity> Activities { get; set; } = [];
+    public ApplicationFormPlan? FormPlan { get; set; }
+}
+
+public enum FormSubmissionMode { SubmitPersonally, ApproveEachSubmission, AutomaticWithinRules }
+
+public sealed class ApplicationFormPlan
+{
+    public int Id { get; set; }
+    public int JobOpportunityId { get; set; }
+    public FormSubmissionMode Mode { get; set; } = FormSubmissionMode.SubmitPersonally;
+    [MaxLength(2000)] public string Rules { get; set; } = "";
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? SubmissionApprovedAt { get; set; }
+    [MaxLength(64)] public string SubmissionApprovalFingerprint { get; set; } = "";
+    public List<ApplicationFormAnswer> Answers { get; set; } = [];
+    public List<ApplicationFormEntry> Entries { get; set; } = [];
+}
+
+public sealed class ApplicationFormAnswer
+{
+    public int Id { get; set; }
+    public int ApplicationFormPlanId { get; set; }
+    [Required, MaxLength(200)] public string FieldLabel { get; set; } = "";
+    [Required, MaxLength(4000)] public string Answer { get; set; } = "";
+    [Required, MaxLength(240)] public string Source { get; set; } = "";
+    public DateTimeOffset ReviewedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+public sealed class ApplicationFormEntry
+{
+    public int Id { get; set; }
+    public int ApplicationFormPlanId { get; set; }
+    [Required, MaxLength(200)] public string FieldLabel { get; set; } = "";
+    [Required, MaxLength(4000)] public string ValueEntered { get; set; } = "";
+    public DateTimeOffset EnteredAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? SubmittedAt { get; set; }
 }
 
 public enum CareerDocumentKind { Resume, CoverLetter }

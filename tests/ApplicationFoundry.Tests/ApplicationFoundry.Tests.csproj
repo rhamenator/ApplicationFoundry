@@ -23,4 +23,14 @@
     <ProjectReference Include="..\..\src\ApplicationFoundry\ApplicationFoundry.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="Fixtures\synthetic-jet4.mdb" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Fixtures\synthetic-ace12.accdb" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Fixtures\synthetic-v2010.accdb" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Fixtures\synthetic-v2016.accdb" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Fixtures\synthetic-v2019.accdb" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Fixtures\synthetic-text-and-blank-page.pdf" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Fixtures\synthetic-jet3-jackcess.mdb" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

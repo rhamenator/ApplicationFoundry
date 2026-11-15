@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/ApplicationFoundry.Desktop/ApplicationFoundry.Desktop.csproj" />
     <Project Path="src/ApplicationFoundry/ApplicationFoundry.csproj" />
   </Folder>
   <Folder Name="/tests/">

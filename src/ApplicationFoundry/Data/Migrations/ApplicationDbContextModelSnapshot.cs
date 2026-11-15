@@ -46,6 +46,108 @@ namespace ApplicationFoundry.Migrations
                     b.ToTable("ApplicationActivities");
                 });
 
+            modelBuilder.Entity("ApplicationFoundry.Data.ApplicationFormAnswer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Answer")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ApplicationFormPlanId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("FieldLabel")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("ReviewedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApplicationFormPlanId");
+
+                    b.ToTable("ApplicationFormAnswers");
+                });
+
+            modelBuilder.Entity("ApplicationFoundry.Data.ApplicationFormEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ApplicationFormPlanId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset>("EnteredAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FieldLabel")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("SubmittedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ValueEntered")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApplicationFormPlanId");
+
+                    b.ToTable("ApplicationFormEntries");
+                });
+
+            modelBuilder.Entity("ApplicationFoundry.Data.ApplicationFormPlan", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("JobOpportunityId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Mode")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Rules")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SubmissionApprovalFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("SubmissionApprovedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JobOpportunityId")
+                        .IsUnique();
+
+                    b.ToTable("ApplicationFormPlans");
+                });
+
             modelBuilder.Entity("ApplicationFoundry.Data.ApplicationUser", b =>
                 {
                     b.Property<string>("Id")
@@ -174,6 +276,57 @@ namespace ApplicationFoundry.Migrations
                     b.ToTable("CandidateProfiles");
                 });
 
+            modelBuilder.Entity("ApplicationFoundry.Data.CandidateSourceDocument", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ExtractedText")
+                        .IsRequired()
+                        .HasMaxLength(200000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("ImportedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MediaType")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ReviewNotes")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SourceSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "ImportedAt");
+
+                    b.ToTable("CandidateSourceDocuments");
+                });
+
             modelBuilder.Entity("ApplicationFoundry.Data.DocumentVersion", b =>
                 {
                     b.Property<int>("Id")
@@ -238,14 +391,104 @@ namespace ApplicationFoundry.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("LegacyImportBatchId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("ProfileId")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("LegacyImportBatchId");
+
                     b.HasIndex("ProfileId");
 
                     b.ToTable("EvidenceItems");
+                });
+
+            modelBuilder.Entity("ApplicationFoundry.Data.LegacyEvidenceImportBatch", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ClaimCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("ImportedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ProfileId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SourceSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProfileId");
+
+                    b.HasIndex("UserId", "ImportedAt");
+
+                    b.ToTable("LegacyEvidenceImportBatches");
+                });
+
+            modelBuilder.Entity("ApplicationFoundry.Data.LegacyProfileImportBatch", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AfterJson")
+                        .IsRequired()
+                        .HasMaxLength(30000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BeforeJson")
+                        .IsRequired()
+                        .HasMaxLength(30000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("ImportedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ProfileId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SourceSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProfileId");
+
+                    b.HasIndex("UserId", "ImportedAt");
+
+                    b.ToTable("LegacyProfileImportBatches");
                 });
 
             modelBuilder.Entity("ApplicationFoundry.Data.JobOpportunity", b =>
@@ -268,6 +511,9 @@ namespace ApplicationFoundry.Migrations
                         .HasColumnType("REAL");
 
                     b.Property<DateTimeOffset>("ImportedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("NextFollowUpOn")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Organization")
@@ -457,6 +703,33 @@ namespace ApplicationFoundry.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ApplicationFoundry.Data.ApplicationFormAnswer", b =>
+                {
+                    b.HasOne("ApplicationFoundry.Data.ApplicationFormPlan", null)
+                        .WithMany("Answers")
+                        .HasForeignKey("ApplicationFormPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ApplicationFoundry.Data.ApplicationFormEntry", b =>
+                {
+                    b.HasOne("ApplicationFoundry.Data.ApplicationFormPlan", null)
+                        .WithMany("Entries")
+                        .HasForeignKey("ApplicationFormPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ApplicationFoundry.Data.ApplicationFormPlan", b =>
+                {
+                    b.HasOne("ApplicationFoundry.Data.JobOpportunity", null)
+                        .WithOne("FormPlan")
+                        .HasForeignKey("ApplicationFoundry.Data.ApplicationFormPlan", "JobOpportunityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ApplicationFoundry.Data.DocumentVersion", b =>
                 {
                     b.HasOne("ApplicationFoundry.Data.JobOpportunity", null)
@@ -470,6 +743,29 @@ namespace ApplicationFoundry.Migrations
                 {
                     b.HasOne("ApplicationFoundry.Data.CandidateProfile", null)
                         .WithMany("Evidence")
+                        .HasForeignKey("ProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ApplicationFoundry.Data.LegacyEvidenceImportBatch", null)
+                        .WithMany()
+                        .HasForeignKey("LegacyImportBatchId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("ApplicationFoundry.Data.LegacyEvidenceImportBatch", b =>
+                {
+                    b.HasOne("ApplicationFoundry.Data.CandidateProfile", null)
+                        .WithMany()
+                        .HasForeignKey("ProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ApplicationFoundry.Data.LegacyProfileImportBatch", b =>
+                {
+                    b.HasOne("ApplicationFoundry.Data.CandidateProfile", null)
+                        .WithMany()
                         .HasForeignKey("ProfileId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -577,6 +873,13 @@ namespace ApplicationFoundry.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ApplicationFoundry.Data.ApplicationFormPlan", b =>
+                {
+                    b.Navigation("Answers");
+
+                    b.Navigation("Entries");
+                });
+
             modelBuilder.Entity("ApplicationFoundry.Data.CandidateProfile", b =>
                 {
                     b.Navigation("Evidence");
@@ -587,6 +890,8 @@ namespace ApplicationFoundry.Migrations
                     b.Navigation("Activities");
 
                     b.Navigation("Documents");
+
+                    b.Navigation("FormPlan");
                 });
 #pragma warning restore 612, 618
         }

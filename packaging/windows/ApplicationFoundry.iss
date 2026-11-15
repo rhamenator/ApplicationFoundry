@@ -9,7 +9,7 @@ AppVersion={#AppVersion}
 DefaultDirName={localappdata}\Programs\Application Foundry
 DefaultGroupName={#AppName}
 PrivilegesRequired=lowest
-UninstallDisplayIcon={app}\ApplicationFoundry.exe
+UninstallDisplayIcon={app}\ApplicationFoundry.Desktop.exe
 OutputDir=..\..\artifacts
 OutputBaseFilename=ApplicationFoundry-{#AppVersion}-windows-x64-setup
 Compression=lzma2
@@ -17,8 +17,8 @@ SolidCompression=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 [Files]
-Source: "..\..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\..\publish-desktop\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Icons]
-Name: "{group}\Application Foundry"; Filename: "{app}\ApplicationFoundry.exe"; Parameters: "--desktop"
+Name: "{group}\Application Foundry"; Filename: "{app}\ApplicationFoundry.Desktop.exe"
 [Run]
-Filename: "{app}\ApplicationFoundry.exe"; Parameters: "--desktop"; Description: "Launch Application Foundry"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\ApplicationFoundry.Desktop.exe"; Description: "Launch Application Foundry"; Flags: nowait postinstall skipifsilent
