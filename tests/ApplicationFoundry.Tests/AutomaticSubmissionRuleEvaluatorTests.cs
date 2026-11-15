@@ -50,6 +50,21 @@ public sealed class AutomaticSubmissionRuleEvaluatorTests
         Assert.Contains(result.Reasons, reason => reason.Contains("HTTPS", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("https://user:secret@example.test/job")]
+    [InlineData("https://example.test:8443/job")]
+    [InlineData("https://localhost/job")]
+    public void Automatic_rules_reject_unsafe_posting_urls(string sourceUrl)
+    {
+        var job = SyntheticJob();
+        job.SourceUrl = sourceUrl;
+
+        var result = AutomaticSubmissionRuleEvaluator.Evaluate(job);
+
+        Assert.False(result.MatchesLocalRules);
+        Assert.Contains(result.Reasons, reason => reason.Contains("HTTPS employer posting URL", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Invalid_score_and_post_submission_status_block()
     {

@@ -11,8 +11,9 @@ public static class AutomaticSubmissionRuleEvaluator
             reasons.Add("Automatic submission preference is not saved for this opportunity.");
         if (job.Status is OpportunityStatus.Submitted or OpportunityStatus.Interviewing or OpportunityStatus.Closed)
             reasons.Add("This opportunity is no longer in a pre-submission state.");
-        if (!Uri.TryCreate(job.SourceUrl, UriKind.Absolute, out var url) || url.Scheme != Uri.UriSchemeHttps)
-            reasons.Add("A valid HTTPS employer posting URL is required.");
+        if (!Uri.TryCreate(job.SourceUrl, UriKind.Absolute, out var url) || url.Scheme != Uri.UriSchemeHttps
+            || !url.IsDefaultPort || !string.IsNullOrEmpty(url.UserInfo) || url.IsLoopback)
+            reasons.Add("An HTTPS employer posting URL without credentials, a loopback host, or a custom port is required.");
 
         string? allowedOrganization = null;
         int? minimumFit = null;
